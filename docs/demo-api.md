@@ -1,8 +1,8 @@
 # Camera demo API
 
-The frontend page lives at `/demo`. The backend supplies the camera feed, Jev processing, room state, and two independent controls. This change contains no frontend implementation.
+The frontend page lives at `/demo`, with Polk 310 first. Each room monitor shows the camera, two independent controls, and a conversation between the agents.
 
-Lion in Polk 310 has room ID `polk-310-office-01`. Use that stable ID in the endpoints below. All operator endpoints require the existing session cookie and workspace scope. Physical mode requires a physical-capable operator account. PATCH requests use the existing application Origin and CSRF headers; the web `api()` helper supplies them.
+Lion in Polk 310 has room ID `polk-310-office-01`. Use that stable ID in the endpoints below. All operator endpoints require the existing session cookie and workspace scope. Physical controls require a physical-capable operator account or an explicit room grant. Grant a scoped host access with `bun run operator:grant-control --email host@example.com --rooms polk-310-office-01`. The room detail response exposes `canControlDevices` for the UI. PATCH requests use the existing application Origin and CSRF headers; the web `api()` helper supplies them.
 
 | Method | Endpoint | Result |
 | --- | --- | --- |
@@ -10,6 +10,9 @@ Lion in Polk 310 has room ID `polk-310-office-01`. Use that stable ID in the end
 | PATCH | `/api/operator/rooms/:id/demo` | Change one or both controls; return status and room `state` |
 | GET | `/api/operator/rooms/:id/stream` | Continuous multipart JPEG preview at four frames per second |
 | GET | `/api/operator/rooms/:id/frame` | One current JPEG, independent of whether Jev is enabled |
+| GET | `/api/operator/rooms/:id/conversation` | Last 100 durable agent messages, oldest first |
+
+The conversation records meaningful inspection, robot, cleaning-job, control, and readiness changes. Frame IDs, timestamps, battery changes, and minor confidence variation do not produce repeated messages. Older snapshots cannot overwrite a newer conversation state. Concierge questions and room answers come from the concierge's actual Relay event handler and the native room inventory check. Cleaning starts and completion are reported only after robot telemetry confirms them. Simulator observations are labeled. The UI polls this small feed once per second and preserves its history across refreshes.
 
 ## Controls
 

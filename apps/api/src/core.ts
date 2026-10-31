@@ -1,6 +1,7 @@
 import type { Context } from 'hono';
 import type { Database } from 'bun:sqlite';
 import { getCookie } from 'hono/cookie';
+import { canControlDevices } from './operations/permissions';
 import type { User, RoomGateway, SearchInput, SearchResult, Office, Workspace, Quote, Reservation, DomainEvent, ReplacementOffer, Notification, DeviceAdapter } from '@odas/contracts';
 
 export interface Config { dataDir: string; origin: string; apiPort: number; internalToken: string; testMode: boolean; namespace: string; deviceMode: 'simulator' | 'physical'; stripeSecretKey?: string; stripeWebhookSecret?: string; [key: string]: unknown }
@@ -28,7 +29,7 @@ export async function requireOperator(c: Context, rt: Runtime, roomId?: string):
   if (roomId) {
     const scope = rt.db.query('SELECT 1 FROM operator_scopes s JOIN offices o ON o.group_id=s.group_id WHERE s.user_id=? AND o.id=?').get(user.id, roomId);
     if (!scope) fail(403, 'This office is outside your assigned workspace.', 'forbidden');
-    if (user.testAccount && rt.config.deviceMode === 'physical' && !['GET', 'HEAD'].includes(c.req.method)) fail(403, 'Test accounts cannot control physical devices.', 'test_account');
+    if (!['GET', 'HEAD'].includes(c.req.method) && !canControlDevices(rt, user, roomId)) fail(403, 'This account has no device-control permission for this room.', 'test_account');
   }
   return user;
 }

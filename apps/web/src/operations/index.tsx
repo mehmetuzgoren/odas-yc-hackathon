@@ -8,12 +8,13 @@ import { RequireAuth } from '../auth';
 import { building, roomName, roomPhotos, roomTitle, ROOM_TYPES } from '../marketplace/listing';
 import { addDays, clockLabel, dateLabel, instantClock, instantDate, instantRange, toMinutes, toTime, zonedNow, zonedParts } from '../marketplace/time';
 import { EmptyState, ErrorState, Loading, Notice, Photo, Switch, Tabs, toast } from '../ui';
+import { AgentConversation } from './AgentConversation';
 
 const PinnedMap = lazy(() => import('../marketplace/MapView').then(module => ({ default: module.PinnedMap })));
 
 type RoomRow = { id: string; name: string; groupId: string; workspaceName: string; rateCents: number; state: RoomSnapshot };
 type Task = { id: string; room_id: string; room_name?: string; workspace_name?: string; reason: string; status: string; assignee?: string; resolution_evidence?: string; created_at: number };
-type Detail = { office: { id: string; groupId: string; name: string; description: string; rateCents: number; rateOverrideCents: number | null; modeled: boolean; deviceBinding: unknown; photos: string[] }; workspace: { id: string; name: string; address: string; timezone: string; accessInstructions?: string | null; hours: { open?: string; close?: string; days?: number[]; modeled?: boolean } }; state: RoomSnapshot; upcoming: { id: string; start_at: number; end_at: number; status: string; payment_status: string }[]; tasks: Task[]; audit: { id: string; actor: string; action: string; created_at: number }[]; deviceMode: string; now: number };
+type Detail = { canControlDevices: boolean; office: { id: string; groupId: string; name: string; description: string; rateCents: number; rateOverrideCents: number | null; modeled: boolean; deviceBinding: unknown; photos: string[] }; workspace: { id: string; name: string; address: string; timezone: string; accessInstructions?: string | null; hours: { open?: string; close?: string; days?: number[]; modeled?: boolean } }; state: RoomSnapshot; upcoming: { id: string; start_at: number; end_at: number; status: string; payment_status: string }[]; tasks: Task[]; audit: { id: string; actor: string; action: string; created_at: number }[]; deviceMode: string; now: number };
 type DemoStatus = { mode: string; captureFps: number; jevEnabled: boolean; roboEnabled: boolean; camera: { connected: boolean; capturedAt: number | null; framesCaptured: number }; vision: { completed: number; failed: number; dropped: number; inFlight: number; lastLatencyMs: number | null; lastError: string | null; retryAfterMs: number }; inspection: RoomSnapshot['inspection']; state: RoomSnapshot; dockResult?: { accepted?: boolean; uncertain?: boolean; message?: string } };
 type Status = 'in_use' | 'free' | 'cleaning' | 'unpublished';
 type Picked = { bookingId: string; startAt: number; endAt: number; status: string; room: RoomRow };
@@ -252,38 +253,6 @@ function Listings({ rooms, onChanged }: { rooms: RoomRow[]; onChanged: () => voi
   </div>;
 }
 
-function TaskList({ tasks, onChanged }: { tasks: Task[]; onChanged: () => void }) {
-  const [resolution, setResolution] = useState<Record<string, string>>({});
-  const [assignees, setAssignees] = useState<Record<string, string>>({});
-  const [busy, setBusy] = useState(false);
-  async function run(path: string, body: unknown, method: string, done: string) {
-    setBusy(true);
-    try { await api(path, { method, body: JSON.stringify(body) }); toast(done); onChanged(); }
-    catch (error) { toast(message(error), 'error'); }
-    finally { setBusy(false); }
-  }
-  if (!tasks.length) return <EmptyState title="Nothing needs attention" text="Rooms that need a person will show up here." />;
-  return <div className="space-y-3">{tasks.map(task => <article key={task.id} className="rounded-xl border border-stone-200 bg-white p-4">
-    <div className="flex flex-wrap items-start justify-between gap-2">
-      <div>
-        <p className="font-semibold text-stone-900">{task.reason}</p>
-        <p className="text-sm text-stone-500">{task.room_name ? roomName(task.room_name) : task.room_id}{task.workspace_name ? ` · ${task.workspace_name}` : ''} · {clock(task.created_at)}{task.assignee ? ` · Assigned to ${task.assignee}` : ''}</p>
-      </div>
-      <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${task.status === 'resolved' ? 'bg-mist text-forest' : 'bg-amber-50 text-amber-800'}`}>{words(task.status)}</span>
-    </div>
-    {task.status === 'resolved' ? <p className="mt-2 text-sm text-stone-600">{task.resolution_evidence}</p> : <div className="mt-3 grid gap-3 md:grid-cols-[1fr_2fr]">
-      <div className="space-y-2">
-        <label className="flex flex-col gap-1.5"><span className="eyebrow">Assignee</span><input value={assignees[task.id] ?? task.assignee ?? ''} onChange={event => setAssignees({ ...assignees, [task.id]: event.target.value })} className={field} /></label>
-        <button disabled={busy || !(assignees[task.id] || task.assignee)} onClick={() => void run(`/operator/tasks/${task.id}`, { assignee: assignees[task.id] || task.assignee }, 'PATCH', 'Task assigned.')} className={secondary}>Assign</button>
-      </div>
-      <div className="space-y-2">
-        <label className="flex flex-col gap-1.5"><span className="eyebrow">Resolution evidence</span><textarea rows={2} placeholder="Describe the work completed and what you observed." minLength={10} value={resolution[task.id] || ''} onChange={event => setResolution({ ...resolution, [task.id]: event.target.value })} className={textarea} /></label>
-        <button disabled={busy || (resolution[task.id] || '').length < 10} onClick={() => void run(`/operator/tasks/${task.id}/resolve`, { evidence: resolution[task.id] }, 'POST', 'Task resolved. A fresh successful inspection is still required for readiness.')} className={secondary}>Resolve task</button>
-      </div>
-    </div>}
-  </article>)}</div>;
-}
-
 function HostAccessRequired() {
   return <div className="max-w-lg rounded-2xl border border-stone-200 bg-white p-8">
     <h2 className="font-serif text-2xl font-semibold">Host access required</h2>
@@ -489,39 +458,7 @@ function phaseOf(state: RoomSnapshot) {
   return { label: 'Awaiting inspection', reason: 'Readiness stays unknown until a fresh inspection completes.', tone: 'border-amber-300 bg-amber-50 text-amber-900' };
 }
 
-function Step({ number, title, on, children }: { number: number; title: string; on: boolean; children: ReactNode }) {
-  return <li className={`rounded-xl border p-4 transition-colors ${on ? 'border-forest/40 bg-white' : 'border-stone-200 bg-white/60 opacity-70'}`}>
-    <p className="mb-2 text-[11px] font-semibold tracking-[0.14em] text-stone-500 uppercase">{number} · {title}</p>
-    {children}
-  </li>;
-}
-
-const OCCUPANCY = { vacant: ['No one', 'bg-mist text-forest'], occupied: ['Someone is there', 'bg-red-50 text-red-800'], unknown: ["Can't tell", 'bg-amber-50 text-amber-800'] } as const;
-
-function Steps({ detail, state, demo }: { detail: Detail; state: RoomSnapshot; demo: DemoStatus | null }) {
-  const inspection = demo?.inspection ?? state.inspection;
-  const job = state.job;
-  const device = state.device;
-  const ready = state.expectedReadyAt || job?.expectedReadyAt;
-  const [occupancy, tone] = OCCUPANCY[inspection?.occupancy ?? 'unknown'];
-  return <ol className="space-y-3">
-    <Step number={1} title="Photo" on={!!inspection}>{inspection ? <p className="text-sm text-stone-600">Captured {clock(inspection.capturedAt)} · {inspection.source}</p> : <p className="text-sm text-stone-500">No check yet</p>}</Step>
-    <Step number={2} title={demo ? 'Jev' : 'Inspection'} on={!!inspection}>{inspection ? <div className="space-y-2 text-sm">
-      <p>Anyone in the room? <span className={`ml-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${tone}`}>{occupancy} · {Math.round(100 * (inspection.confidence || 0))}%</span></p>
-      <p>Floor <b className="capitalize">{inspection.floor}</b> · Surfaces <b className="capitalize">{inspection.surfaces}</b></p>
-      <p className="text-xs text-stone-500">Inference returned {clock(inspection.inferredAt)}{demo?.vision.lastLatencyMs != null ? ` · ${demo.vision.lastLatencyMs} ms` : ''} · Revision {state.revision}</p>
-    </div> : <p className="text-sm text-stone-500">{demo ? 'Waiting for Jev' : 'Waiting for an inspection'}</p>}</Step>
-    <Step number={3} title="Decision" on={!!inspection}><p className="text-sm">{phaseOf(state).reason}</p><p className="mt-1 text-xs text-stone-500 capitalize">{words(state.readiness)} · {state.operational}</p>{ready && <p className="mt-1 text-xs text-stone-500">Expected readiness {clock(ready)} ({job?.estimateSource === 'configured' ? 'configured estimate; no measured history yet' : 'estimate from cleaning history'}{ready < detail.now && state.readiness !== 'ready' ? '; estimate has passed, readiness is uncertain' : ''})</p>}</Step>
-    <Step number={4} title="Robot" on={['cleaning', 'returning'].includes(device?.state ?? '')}>
-      <p className="text-sm"><b>{device?.state || 'unknown'}</b> · {device?.connection || 'unverified'}{device ? ` · ${device.source}` : ''}</p>
-      {device?.battery != null && <div className="mt-2"><div className="relative h-2.5 rounded-full bg-stone-200"><div className="h-full rounded-full bg-forest transition-[width] duration-300" style={{ width: `${device.battery}%` }} /></div><p className="mt-1 text-xs text-stone-500">Battery {device.battery}%</p></div>}
-    </Step>
-    <Step number={5} title="Cleaning job" on={!!job}>{job ? <><p className="text-sm capitalize">{words(job.status)}</p><p className="mt-1 text-xs text-stone-500">{job.reason || 'Vendor acceptance and observed motion are separate stages.'} · Job {job.id}</p></> : <p className="text-sm">No cleaning job has been requested.</p>}</Step>
-  </ol>;
-}
-
 function Monitor({ id }: { id: string }) {
-  const { user } = useSession();
   const { detail, error, live, reload } = useRoomDetail(id);
   const [demo, setDemo] = useDemoStatus(id);
   const [busy, setBusy] = useState(false);
@@ -553,7 +490,7 @@ function Monitor({ id }: { id: string }) {
   const state = demo?.state ?? detail.state;
   const phase = phaseOf(state);
   const simulated = detail.deviceMode === 'simulator';
-  const readOnly = !simulated && user?.testAccount === true;
+  const readOnly = !detail.canControlDevices;
   const stale = !!demo?.camera.capturedAt && Date.now() - demo.camera.capturedAt > 10_000;
   const camera = demo ? (!demo.camera.connected ? 'disconnected' : stale ? 'stale' : 'connected') : state.inspection?.connection;
   return <div className="space-y-6">
@@ -564,8 +501,7 @@ function Monitor({ id }: { id: string }) {
         <div className="mt-2 flex flex-wrap gap-2">
           <Chip tone={live ? 'green' : 'red'}>{live ? 'Live updates' : 'Reconnecting…'}</Chip>
           <Chip tone={camera === 'connected' ? 'green' : camera === 'disconnected' ? 'red' : 'amber'}>{camera === 'connected' ? 'Camera live' : camera === 'disconnected' ? 'Camera offline' : camera === 'stale' ? 'Camera stale' : 'Camera unverified'}</Chip>
-          <Chip tone={simulated ? 'amber' : 'green'}>{simulated ? 'Simulated vacuum' : detail.deviceMode === 'physical' ? 'Physical adapter' : 'Adapter unavailable'}</Chip>
-          <Chip>{office.modeled ? 'Modeled inventory' : 'Configured inventory'}</Chip>
+          {simulated && <Chip tone="amber">Simulated devices</Chip>}
         </div>
       </div>
       {demo && <div className="flex items-center gap-5">
@@ -573,7 +509,6 @@ function Monitor({ id }: { id: string }) {
         <label className="flex items-center gap-2 text-sm font-medium">Auto clean<Switch label="Auto clean (Robo)" checked={demo.roboEnabled} disabled={busy || readOnly} onChange={roboEnabled => void configure({ roboEnabled })} /></label>
       </div>}
     </header>
-    {readOnly && <p className="text-sm text-stone-600">View-only access. An authorized operator manages monitoring and cleaning.</p>}
     <section className={`rounded-2xl border p-5 ${phase.tone}`}>
       <p className="font-serif text-3xl font-semibold">{phase.label}</p>
       <p className="mt-1 text-sm">{phase.reason}</p>
@@ -590,28 +525,16 @@ function Monitor({ id }: { id: string }) {
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.25fr_1fr]">
       <section className="space-y-3">
         <div className={`relative overflow-hidden rounded-2xl border-4 bg-stone-900 transition-colors ${demo?.vision.inFlight ? 'border-sky-500' : 'border-transparent'}`}>
-          {cameraFailed ? <div className="flex aspect-video items-center justify-center px-6 text-center text-sm text-stone-400">{simulated ? 'No verified camera frame is available. Simulated observations do not contain camera photos.' : 'No camera frames yet'}</div>
+          {cameraFailed || camera === 'disconnected' ? <div className="flex aspect-video items-center justify-center px-6 text-center text-sm text-stone-400">{simulated ? 'Simulated observations do not contain camera photos.' : 'Camera offline. Waiting for a new frame.'}</div>
             : <img src={demo ? `/api/operator/rooms/${id}/stream` : `/api/operator/rooms/${id}/frame?at=${captured ?? 0}`} alt={`Latest restricted camera frame for ${roomName(office.name)}`} onError={() => setCameraFailed(true)} className="aspect-video w-full object-contain" />}
-          {stale && <span className="absolute top-3 left-3 rounded-full bg-amber-500 px-3 py-1 text-xs font-semibold text-white">Stale: no new frame for 10 s</span>}
+          {stale && camera !== 'disconnected' && <span className="absolute top-3 left-3 rounded-full bg-amber-500 px-3 py-1 text-xs font-semibold text-white">Stale: no new frame for 10 s</span>}
         </div>
-        <p className="text-xs text-stone-500">{simulated ? 'Device observations are simulated and explicitly bound to configured offices. Other offices remain unverified.' : 'Connection status reflects configured adapters. Commissioning must verify the private camera route and Q10 cloud commands.'}</p>
       </section>
-      <Steps detail={detail} state={state} demo={demo} />
+      <AgentConversation key={id} roomId={id} />
     </div>
     <section className="rounded-2xl border border-stone-200 bg-white p-5">
       <h2 className="mb-3 font-serif text-xl font-semibold">Upcoming reservations</h2>
       {detail.upcoming.length ? <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b border-stone-200 text-xs text-stone-500"><th className="py-2 pr-4 font-medium">Reservation</th><th className="py-2 pr-4 font-medium">Interval ({workspace.timezone})</th><th className="py-2 pr-4 font-medium">Status</th><th className="py-2 font-medium">Payment</th></tr></thead><tbody className="divide-y divide-stone-100">{detail.upcoming.map(booking => <tr key={booking.id}><td className="py-2 pr-4 font-mono text-xs">{booking.id.slice(-8).toUpperCase()}</td><td className="py-2 pr-4">{clock(booking.start_at, workspace.timezone)} to {instantClock(booking.end_at, workspace.timezone)}</td><td className="py-2 pr-4 capitalize">{words(booking.status)}</td><td className="py-2 capitalize">{words(booking.payment_status)}</td></tr>)}</tbody></table></div> : <p className="text-sm text-stone-500">No upcoming reservations.</p>}
-    </section>
-    <section className="space-y-3 rounded-2xl border border-stone-200 bg-white p-5">
-      <h2 className="font-serif text-xl font-semibold">Attention tasks</h2>
-      <TaskList tasks={detail.tasks} onChanged={() => void reload()} />
-    </section>
-    <section className="rounded-2xl border border-stone-200 bg-white p-5">
-      <h2 className="mb-3 font-serif text-xl font-semibold">Timeline</h2>
-      <ul className="max-h-72 space-y-1.5 overflow-y-auto text-sm">
-        {detail.audit.map(entry => <li key={entry.id} className="flex gap-3"><span className="w-36 shrink-0 font-mono text-xs text-stone-400">{clock(entry.created_at)}</span><span className="text-stone-700 capitalize">{words(entry.action.replaceAll('.', ' '))}</span></li>)}
-        {!detail.audit.length && <li className="text-stone-500">Nothing yet</li>}
-      </ul>
     </section>
     {error && <Notice tone="error">{error}</Notice>}
   </div>;
@@ -621,7 +544,7 @@ function MonitorRooms() {
   const { rooms, error, reload } = useHostRooms();
   const [catalog, setCatalog] = useState<SearchResult | null>(null);
   const [monitored, setMonitored] = useState<string[]>([]);
-  const shown = useMemo(() => rooms ? buildingsOf(rooms).map(list => list[0]!) : [], [rooms]);
+  const shown = useMemo(() => rooms ? buildingsOf(rooms).map(list => list[0]!).sort((a, b) => Number(b.groupId === 'polk-310') - Number(a.groupId === 'polk-310')) : [], [rooms]);
   const ids = shown.map(room => room.id).join();
   useEffect(() => { api<SearchResult>('/catalog/search').then(setCatalog).catch(() => {}); }, []);
   useEffect(() => {
