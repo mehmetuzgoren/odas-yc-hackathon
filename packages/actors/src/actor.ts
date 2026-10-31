@@ -194,7 +194,7 @@ export class RoomActor extends Actor {
         s.occupancy = now - i.capturedAt <= EVIDENCE_MS && i.connection === 'connected' && i.confidence >= CONFIDENCE ? i.occupancy : 'unknown';
         s.cleanliness = i.floor;
         event('room.inspected', { inspectionId: i.id, occupancy: s.occupancy, floor: i.floor, surfaces: i.surfaces, capturedAt: i.capturedAt, confidence: i.confidence });
-        if (s.job?.status === 'started' && (!this.#fresh(s, now) || i.occupancy === 'occupied')) event('cleaning.interrupt_required', { jobId: s.job.id, reason: i.occupancy === 'occupied' ? 'Person detected during cleaning.' : 'Vacancy evidence is unavailable.' });
+        if (s.job && ['started', 'dispatching', 'uncertain'].includes(s.job.status) && (!this.#fresh(s, now) || i.occupancy === 'occupied')) event('cleaning.interrupt_required', { jobId: s.job.id, reason: i.occupancy === 'occupied' ? 'Person detected during cleaning.' : 'Vacancy evidence is unavailable.' });
         break;
       }
       case 'telemetry': {
@@ -222,7 +222,7 @@ export class RoomActor extends Actor {
       case 'request_clean': {
         if (s.job && ACTIVE_JOBS.has(s.job.status)) return s.job.id === cmd.jobId ? { ok: true } : reject('job_active', 'A cleaning job is already active.');
         if (s.operational !== 'available' || !this.#fresh(s, now)) return reject('vacancy_required', 'Fresh confident vacancy evidence is required before cleaning.');
-        if (s.inspection?.surfaces !== 'clear') return reject('surface_attention', 'Desk or surface clutter requires attention before cleaning.');
+        if (s.inspection?.scope !== 'stage' && s.inspection?.surfaces !== 'clear') return reject('surface_attention', 'Desk or surface clutter requires attention before cleaning.');
         s.job = { id: cmd.jobId, status: 'requested', requestedAt: now, expectedReadyAt: cmd.expectedReadyAt || now + 10 * 60_000, estimateSource: 'configured', commandId: `${cmd.jobId}:start` };
         s.expectedReadyAt = s.job.expectedReadyAt || null;
         event('cleaning.requested', { jobId: cmd.jobId, expectedReadyAt: s.expectedReadyAt, estimateSource: 'configured' });
@@ -238,7 +238,7 @@ export class RoomActor extends Actor {
       }
       case 'authorize_dispatch': {
         if (!s.job || s.job.id !== cmd.jobId || s.job.status !== 'requested' || s.job.claimId !== cmd.claimId || (s.job.claimExpiresAt || 0) <= now) return reject('invalid_claim', 'The cleaning claim is no longer valid.');
-        if (!this.#fresh(s, now) || s.operational !== 'available' || s.inspection?.surfaces !== 'clear') return reject('vacancy_required', 'Fresh confident vacancy is required at dispatch.');
+        if (!this.#fresh(s, now) || s.operational !== 'available' || s.inspection?.scope !== 'stage' && s.inspection?.surfaces !== 'clear') return reject('vacancy_required', 'Fresh confident vacancy is required at dispatch.');
         if (!s.device || s.device.connection !== 'connected' || now - s.device.observedAt > TELEMETRY_MS || !['docked', 'idle'].includes(s.device.state)) return reject('device_unavailable', 'A fresh idle robot observation is required.');
         s.job = { ...s.job, status: 'dispatching' };
         event('cleaning.dispatching', { jobId: cmd.jobId, commandId: s.job.commandId });

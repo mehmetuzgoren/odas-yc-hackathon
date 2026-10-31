@@ -158,8 +158,9 @@ export function createOperationsService(rt: Runtime): OperationsService {
     if (event.type === 'room.inspection_requested') return inspect(event.roomId);
     if (event.type === 'cleaning.requested') return dispatch(event.roomId, event);
     if (event.type === 'cleaning.interrupt_required') return dock(event.roomId, String(event.payload.reason || 'Vacancy evidence is unavailable'), `${event.id}:dock`);
-    if (event.type === 'room.inspected' && state.inspection && state.inspection.id === event.payload.inspectionId) {
-      if (state.inspection.floor === 'dirty' && state.inspection.occupancy === 'vacant' && state.inspection.surfaces === 'clear' && state.inspection.confidence >= 0.9 && (!state.job || !['requested', 'dispatching', 'started', 'uncertain'].includes(state.job.status)) && await roboEnabled(event.roomId)) {
+    // Inference advances faster than Relay delivery; decide from the latest actor evidence.
+    if (event.type === 'room.inspected' && state.inspection) {
+      if (state.inspection.floor === 'dirty' && state.inspection.occupancy === 'vacant' && (state.inspection.scope === 'stage' || state.inspection.surfaces === 'clear') && state.inspection.confidence >= 0.9 && (!state.job || !['requested', 'dispatching', 'started', 'uncertain'].includes(state.job.status)) && await roboEnabled(event.roomId)) {
         const result = await rt.rooms.command(event.roomId, { id: `${event.id}:clean`, type: 'request_clean', now: now(), jobId: `clean:${event.id}`, expectedReadyAt: now() + Number(rt.config.cleaningEstimateMs || 10 * 60_000) });
         await drainRoom(event.roomId, result.snapshot);
         return { requested: result.ok, code: result.code };
@@ -193,7 +194,7 @@ export function createOperationsService(rt: Runtime): OperationsService {
     const state = await rt.rooms.snapshot(roomId);
     const i = state.inspection;
     if (!state.job || state.job.commandId !== commandId || state.job.status !== 'dispatching' || (state.job.claimExpiresAt || 0) <= now()) return false;
-    return state.operational === 'available' && !!i && i.occupancy === 'vacant' && i.confidence >= 0.9 && i.connection === 'connected' && i.surfaces === 'clear' && now() - i.capturedAt <= VACANCY_AGE && i.capturedAt <= now() + 1000;
+    return state.operational === 'available' && !!i && i.occupancy === 'vacant' && i.confidence >= 0.9 && i.connection === 'connected' && (i.scope === 'stage' || i.surfaces === 'clear') && now() - i.capturedAt <= VACANCY_AGE && i.capturedAt <= now() + 1000;
   }
   async function configureDemo(roomId: string, changes: { jevEnabled?: boolean; roboEnabled?: boolean }) {
     const status = await demoStatus(roomId, changes);

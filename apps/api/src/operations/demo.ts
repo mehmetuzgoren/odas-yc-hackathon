@@ -12,5 +12,6 @@ export const cameraInspectionSchema = z.object({
   occupancy: z.enum(['vacant', 'occupied', 'unknown']), confidence: z.number().min(0).max(1),
   floor: z.enum(['clean', 'dirty', 'unknown']), surfaces: z.enum(['clear', 'cluttered', 'unknown']),
   connection: z.enum(['connected', 'disconnected', 'unverified']),
+  scope: z.literal('stage').optional(),
   frameId: z.string().max(400).optional(), error: z.string().max(1000).optional(),
 }).strict();

@@ -6,7 +6,8 @@ import time
 from pathlib import Path
 from aiohttp import ClientSession
 from roborock.data import UserData
-from roborock.data.b01_q10.b01_q10_code_mappings import YXCleanType
+from roborock.data.b01_q10.b01_q10_code_mappings import YXCleanType, B01_Q10_DP
+from roborock.protocols.b01_q10_protocol import Q10DpsUpdate
 from roborock.devices.device_manager import UserParams, create_device_manager
 
 class Q10Cloud:
@@ -17,6 +18,7 @@ class Q10Cloud:
         self.devices: dict = {}
         self.observed: dict[str, int] = {}
         self.unsubscribers = []
+        self.status_tasks = []
         self.task = None
         self.error = 'Roborock cloud account and physical connection have not been verified.'
 
@@ -40,6 +42,9 @@ class Q10Cloud:
                     def updated(duid=device.duid):
                         self.observed[duid] = int(time.time() * 1000)
                     self.unsubscribers.append(device.b01_q10_properties.status.add_update_listener(updated))
+                    # The pinned driver's trait listener only fires when values change.
+                    # Observe actual DPS messages too, so repeated docked status stays fresh.
+                    self.status_tasks.append(asyncio.create_task(self._observe_status(device)))
                     await device.b01_q10_properties.refresh()
                 self.error = ''
                 return  # Device manager owns persistent reconnecting MQTT connections.
@@ -47,11 +52,21 @@ class Q10Cloud:
                 raise
             except Exception:
                 self.error = 'Roborock cloud connection failed or requires renewed account authentication.'
+                for task in self.status_tasks:
+                    task.cancel()
+                await asyncio.gather(*self.status_tasks, return_exceptions=True)
+                self.status_tasks.clear()
                 if self.manager:
                     await self.manager.close()
                     self.manager = None
                 self.devices.clear()
                 await asyncio.sleep(15)
+
+    async def _observe_status(self, device) -> None:
+        # python-roborock 7.13.0 exposes its decoded stream on the Q10 channel.
+        async for message in device.b01_q10_properties._channel.subscribe_stream():
+            if isinstance(message, Q10DpsUpdate) and B01_Q10_DP.STATUS in message.dps:
+                self.observed[device.duid] = int(time.time() * 1000)
 
     async def telemetry(self, room_id: str, duid: str) -> dict:
         device = self.devices.get(duid)
@@ -87,6 +102,9 @@ class Q10Cloud:
         if self.task:
             self.task.cancel()
             await asyncio.gather(self.task, return_exceptions=True)
+        for task in self.status_tasks:
+            task.cancel()
+        await asyncio.gather(*self.status_tasks, return_exceptions=True)
         for unsubscribe in self.unsubscribers:
             unsubscribe()
         if self.manager:
