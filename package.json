@@ -17,8 +17,8 @@
     "check": "bun run typecheck && bun run build",
     "test:integration": "bun scripts/integration.ts",
     "test:scenario": "bun scripts/scenario.ts",
-    "actors:dev": "bunx terse-cli actor dev",
-    "actors:generate": "bun scripts/generate-actors.ts"
+    "actors:generate": "bun scripts/generate-actors.ts",
+    "operator:create": "bun scripts/provision-operator.ts"
   },
   "dependencies": {
     "@agent-relay/sdk": "15.0.1",

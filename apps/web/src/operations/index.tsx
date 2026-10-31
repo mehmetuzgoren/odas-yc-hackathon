@@ -61,7 +61,7 @@ export function OperatorPage() {
   }, [detail?.office.id]);
   async function action(path: string, body: unknown = {}, method = 'POST', message = 'Action saved.') {
     setBusy(true); setError(''); setSuccess('');
-    try { await api(path, { method, body: JSON.stringify(body) }); await reload(); setSuccess(message); }
+    try { const result = await api<any>(path, { method, body: JSON.stringify(body) }); if (result?.accepted === false || result?.ok === false) throw new Error(result.message || (result.uncertain ? 'Command delivery is uncertain. Reconcile observed device state before retrying.' : 'The device action was not accepted.')); await reload(); setSuccess(message); }
     catch (e) { setError((e as Error).message); }
     finally { setBusy(false); }
   }
@@ -92,7 +92,7 @@ export function OperatorPage() {
   const state = detail?.state;
   return <main className="container page ops-page">
     <div className="ops-heading"><div><p className="eyebrow">ODAS operations</p><h1>Room control</h1><p className="muted">Inventory and turnover for your assigned workspaces.</p></div><button className="button secondary" disabled={busy} onClick={() => { setError(''); reload().catch(e => setError(e.message)); }}><RefreshCw size={17} /> Refresh</button></div>
-    <div className="ops-mode" role="note"><ShieldCheck size={20} /><div><strong>{mode === 'simulator' ? 'Simulator mode' : 'Physical adapter mode'}</strong><p>{mode === 'simulator' ? 'Device observations are simulated and explicitly bound to configured offices. Other offices remain unverified.' : 'Connection status reflects configured adapters. Commissioning must verify the private camera route and Q10 cloud commands.'}</p></div></div>
+    <div className="ops-mode" role="note"><ShieldCheck size={20} /><div><strong>{mode === 'simulator' ? 'Simulator mode' : mode === 'physical' ? 'Physical adapter mode' : 'Adapter status unavailable'}</strong><p>{mode === 'simulator' ? 'Device observations are simulated and explicitly bound to configured offices. Other offices remain unverified.' : mode === 'physical' ? 'Connection status reflects configured adapters. Commissioning must verify the private camera route and Q10 cloud commands.' : 'Load the assigned inventory to see its configured adapter mode and connection status.'}</p></div></div>
     {error && <p role="alert" className="error">{error}</p>}{success && <p role="status" className="success">{success}</p>}
     <nav className="ops-tabs" aria-label="Operations views"><button aria-pressed={tab === 'rooms'} className={tab === 'rooms' ? 'active' : ''} onClick={() => setTab('rooms')}><Wrench size={17} /> Offices ({rooms.length})</button><button aria-pressed={tab === 'tasks'} className={tab === 'tasks' ? 'active' : ''} onClick={() => setTab('tasks')}><ClipboardList size={17} /> Attention ({tasks.filter(t => t.status !== 'resolved').length})</button></nav>
     {tab === 'tasks' ? <section><h2>Attention tasks</h2><p className="muted">Resolving a task records evidence. Room readiness comes from fresh inspections and device observations.</p>{taskList(tasks)}</section> : <div className="ops-layout">

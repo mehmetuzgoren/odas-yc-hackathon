@@ -1,5 +1,5 @@
 import { Actor, Persisted } from 'terse-sdk/actor';
-import type { DomainEvent, RoomCommand, RoomResult, RoomSnapshot, InventoryInterval } from '@odas/contracts';
+import type { DomainEvent, RoomCommand, RoomResult, RoomSnapshot, InventoryInterval } from './contracts';
 
 const configuredMinutes = (name: string, fallback: number) => { const value = Number(process.env[name] ?? fallback); return Number.isFinite(value) && value >= 0 && value <= 120 ? value : fallback; };
 const BUFFER_MS = configuredMinutes('TURNOVER_BUFFER_MINUTES', 15) * 60_000;
@@ -200,6 +200,7 @@ export class RoomActor extends Actor {
       case 'telemetry': {
         const t = cmd.telemetry;
         if (t.roomId !== this.id || !Number.isFinite(t.observedAt) || t.observedAt > now + 1000 || !['docked', 'cleaning', 'returning', 'idle', 'unknown', 'error'].includes(t.state) || !['connected', 'disconnected', 'unverified'].includes(t.connection) || (s.device && t.observedAt < s.device.observedAt)) return reject('out_of_order', 'Robot telemetry is stale, contradictory, or belongs to another room.');
+        const previousDevice = s.device;
         s.device = t;
         if (s.job && ['dispatching', 'uncertain'].includes(s.job.status) && t.state === 'cleaning' && t.connection === 'connected' && t.observedAt >= s.job.requestedAt) {
           s.job = { ...s.job, status: 'started', startedAt: s.job.startedAt || t.observedAt };
@@ -210,6 +211,10 @@ export class RoomActor extends Actor {
           this.inspectionRequiredAfter = t.observedAt;
           event('cleaning.completed', { jobId: s.job.id });
           event('room.inspection_requested', { reason: 'Fresh post-cleaning inspection is required.' });
+        } else if (s.job?.status === 'interrupted' && t.state === 'docked' && t.connection === 'connected' && previousDevice?.state !== 'docked') {
+          s.inspection = null; s.occupancy = 'unknown'; s.cleanliness = 'unknown';
+          this.inspectionRequiredAfter = Math.max(this.inspectionRequiredAfter, t.observedAt);
+          event('room.inspection_requested', { reason: 'Fresh inspection is required after interrupted cleaning reaches the dock.' });
         }
         if (t.connection !== 'connected' && s.job?.status === 'started') event('cleaning.interrupt_required', { jobId: s.job.id, reason: 'Robot connection lost; stop delivery is uncertain.' });
         break;
@@ -247,6 +252,11 @@ export class RoomActor extends Actor {
         s.job = { ...s.job, status: cmd.status, reason: cmd.reason, expectedReadyAt: cmd.expectedReadyAt || s.job.expectedReadyAt };
         if (cmd.expectedReadyAt) s.expectedReadyAt = cmd.expectedReadyAt;
         event(`cleaning.${cmd.status}`, { jobId: cmd.jobId, reason: cmd.reason, expectedReadyAt: s.expectedReadyAt });
+        if (cmd.status === 'interrupted') {
+          s.inspection = null; s.occupancy = 'unknown'; s.cleanliness = 'unknown';
+          this.inspectionRequiredAfter = Math.max(this.inspectionRequiredAfter, now);
+          event('room.inspection_requested', { reason: 'Interrupted cleaning requires fresh inspection; earlier frames cannot establish readiness.' });
+        }
         this.#disruptions(s, cmd, now);
         break;
       }

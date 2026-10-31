@@ -51,5 +51,25 @@ if (phase === 'before') {
   const duplicate = await actor.command({ id: 'restart-hold', now: at, type: 'hold', bookingId: 'restart-reservation', startAt: now + 14400000, endAt: now + 18000000, expiresAt: now + 80000 });
   assert.equal((await actor.snapshot()).intervals.filter(i => i.bookingId === 'restart-reservation').length, 1, 'retry after restart never creates a duplicate interval');
   assert.equal(duplicate.snapshot.roomId, 'ops-safety-room');
-  console.log('Native restart checks passed: inventory, job intent, and pending outbox survive actual process restart; observed motion/completion, person interruption, fresh post-clean inspection and retry idempotency verified.');
+  // Regression observed in the operator dock flow: an in-clean frame must not establish readiness after interruption.
+  assert((await send({ type: 'request_clean', jobId: 'interruption-job' }, at + 4000)).ok);
+  assert((await send({ type: 'claim_clean', jobId: 'interruption-job', claimId: 'interruption-claim', claimExpiresAt: at + 30000 }, at + 4000)).ok);
+  assert((await send({ type: 'authorize_dispatch', jobId: 'interruption-job', claimId: 'interruption-claim' }, at + 4000)).ok);
+  assert((await send({ type: 'telemetry', telemetry: { roomId: 'ops-safety-room', source: 'simulator', observedAt: at + 5000, connection: 'connected', state: 'cleaning' } }, at + 5000)).ok);
+  assert((await inspect(6, at + 6000, { floor: 'clean' })).ok);
+  assert.equal((await actor.snapshot()).readiness, 'not_ready');
+  const interrupted = await send({ type: 'job_result', jobId: 'interruption-job', status: 'interrupted', reason: 'Operator requested docking' }, at + 7000);
+  assert(interrupted.ok);
+  assert.equal(interrupted.snapshot.inspection, null);
+  assert.equal(interrupted.snapshot.occupancy, 'unknown');
+  assert.equal(interrupted.snapshot.cleanliness, 'unknown');
+  assert(interrupted.snapshot.events.some(event => event.type === 'room.inspection_requested' && event.occurredAt === at + 7000));
+  assert((await inspect(7, at + 7500, { floor: 'clean' })).ok);
+  assert((await send({ type: 'telemetry', telemetry: { roomId: 'ops-safety-room', source: 'simulator', observedAt: at + 8000, connection: 'connected', state: 'docked' } }, at + 8000)).ok);
+  assert.equal((await actor.snapshot()).job?.status, 'interrupted');
+  assert.equal((await actor.snapshot()).readiness, 'unknown', 'observed docking cannot reuse an in-motion inspection');
+  assert.equal((await inspect(8, at + 8500, { floor: 'clean', capturedAt: at + 7500 })).ok, false, 'late inference of a pre-dock frame cannot restore readiness');
+  assert((await inspect(9, at + 9000, { floor: 'clean' })).ok);
+  assert.equal((await actor.snapshot()).readiness, 'ready', 'a fresh post-dock inspection may restore readiness');
+  console.log('Native restart checks passed: inventory, job intent, and pending outbox survive actual process restart; observed motion/completion, interruption invalidation, fresh post-dock inspection and retry idempotency verified.');
 }

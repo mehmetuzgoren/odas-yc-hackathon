@@ -30,7 +30,9 @@ async function rpc<T>(path: string, body?: unknown): Promise<T> {
   return data as T;
 }
 async function send(envelope: RelayEnvelope, idempotencyKey: string) {
-  return agent.sendMessage({ to: `@${identities.agents[other]!.name}`, text: JSON.stringify(envelope), idempotencyKey, metadata: { application: 'odas', version: 1, kind: envelope.kind } });
+  // Relaycast limits transport keys to 255 characters. Keep full domain IDs in the envelope.
+  const transportKey = `odas-v1-${new Bun.CryptoHasher('sha256').update(idempotencyKey).digest('hex')}`;
+  return agent.sendMessage({ to: `@${identities.agents[other]!.name}`, text: JSON.stringify(envelope), idempotencyKey: transportKey, metadata: { application: 'odas', version: 1, kind: envelope.kind } });
 }
 async function receive(message: RelayMessage) {
   if (message.from.name !== identities.agents[other]!.name) return;

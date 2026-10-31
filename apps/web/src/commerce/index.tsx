@@ -108,7 +108,22 @@ export function ReservationPage() {
     if (!user || !params.has('checkout')) return;
     // The redirect only starts reconciliation. The server verifies Checkout with Stripe.
     let disposed = false;
-    void api<Reservation>(`/reservations/${id}/reconcile`, { method: 'POST' }).then(data => { if (!disposed) { setReservation(data); setSuccess(data.paymentStatus === 'paid' ? 'Stripe confirmed your payment.' : 'Payment has not been confirmed. You can check again below.'); } }).catch(err => { if (!disposed) setError(message(err)); });
+    async function reconcile() {
+      for (let attempt = 0; attempt < 5 && !disposed; attempt++) {
+        try {
+          const data = await api<Reservation>(`/reservations/${id}/reconcile`, { method: 'POST' });
+          if (!disposed) { setReservation(data); setError(''); setSuccess(data.paymentStatus === 'paid' ? 'Stripe confirmed your payment.' : 'Payment has not been confirmed. You can check again below.'); }
+          return;
+        } catch (err) {
+          if ((err as { code?: string }).code === 'workflow_busy') {
+            if (attempt < 4) { await new Promise(resolve => setTimeout(resolve, 350)); continue; }
+            if (!disposed) setSuccess('Stripe verification continues in the background. The latest payment status appears below.');
+          } else if (!disposed) setError(message(err));
+          return;
+        }
+      }
+    }
+    void reconcile();
     return () => { disposed = true; };
   }, [user, id, params]);
   async function act(path: string) {

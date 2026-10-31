@@ -31,7 +31,10 @@ export function loadConfig(): Config {
  if(testMode && (deviceMode==='physical' || !namespace.startsWith('test-'))) throw new Error('Controlled clocks require an isolated test-* namespace and simulator');
  if(process.env.STRIPE_SECRET_KEY && !/^(sk|rk|rkcs)_test_/.test(process.env.STRIPE_SECRET_KEY)) throw new Error('ODAS MVP accepts Stripe test/sandbox keys only');
  const origin=process.env.APP_ORIGIN || `http://127.0.0.1:${process.env.WEB_PORT||5173}`;
- const config:Config={dataDir,origin,apiPort:Number(process.env.API_PORT||3000),internalToken:process.env.INTERNAL_TOKEN!,namespace,testMode,deviceMode,stripeSecretKey:process.env.STRIPE_SECRET_KEY||undefined,stripeWebhookSecret:process.env.STRIPE_WEBHOOK_SECRET||undefined};
+ process.env.OPENAI_API_KEY ||= process.env.MODEL_API_KEY;
+ process.env.CONCIERGE_MODEL_BASE_URL ||= process.env.MODEL_BASE_URL;
+ process.env.CONCIERGE_MODEL ||= process.env.MODEL_NAME;
+ const config:Config={dataDir,origin,apiPort:Number(process.env.API_PORT||3000),internalToken:process.env.INTERNAL_TOKEN!,namespace,testMode,deviceMode,stripeSecretKey:process.env.STRIPE_SECRET_KEY||undefined,stripeWebhookSecret:process.env.STRIPE_WEBHOOK_SECRET||undefined,checkInWindowMinutes:Number(process.env.CHECK_IN_WINDOW_MINUTES||15),cancellationPolicy:process.env.CANCELLATION_POLICY_TEXT||undefined,cleaningEstimateMs:Number(process.env.CLEANING_ESTIMATE_MINUTES||10)*60_000};
  return config;
 }
 export function createClock(config:Config):Clock {

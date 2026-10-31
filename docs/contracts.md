@@ -34,3 +34,5 @@ Room actor public contract: snapshot(): Promise<RoomSnapshot>, command(command: 
 DomainEvent v1 carries id, roomId, optional bookingId, correlationId, revision, idempotencyKey, occurredAt and typed payload. Relay delivery receipts do not mean business completion. Workers store processed-message results and send application result messages. Outbox delivery remains retryable until an application result is stored.
 
 SQLite schema is centrally owned. Most tables include a data JSON column for feature detail alongside indexed/CAS columns. Ask the lead for schema extensions. Isolated integration runs set DATA_DIR, API_PORT, WEB_PORT, ACTOR_PORT, ACTOR_PROJECT_ID, DEVICE_PORT and ODAS_NAMESPACE. Test clock requires ODAS_TEST_MODE=1 and simulated devices.
+
+The integration lead owns the shared type declarations in `packages/actors/src/contracts.ts`, re-exported by `packages/contracts/src/index.ts`. This keeps the official managed Terse source archive self-contained; app runtime schemas and constants remain in `packages/contracts`. The actor contract is unchanged.
