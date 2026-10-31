@@ -171,7 +171,7 @@ export function createOperationsService(rt: Runtime): OperationsService {
   }
   async function tick() {
     const rooms = await rt.db.query('SELECT id,device_binding_json FROM offices').all() as { id: string; device_binding_json: string | null }[];
-    for (const { id, device_binding_json } of rooms) {
+    const pollRoom = async ({ id, device_binding_json }: typeof rooms[number]) => {
       const binding = device_binding_json ? JSON.parse(device_binding_json) : null;
       const bound = explicitBindings.has(id) || binding && binding.mode === rt.config.deviceMode;
       let state = await rt.rooms.snapshot(id);
@@ -185,7 +185,11 @@ export function createOperationsService(rt: Runtime): OperationsService {
         if (!state.inspection) await inspect(id);
       }
       await drainRoom(id);
-    }
+    };
+    // Independent room mailboxes can be polled together without delaying bound devices behind the full catalog.
+    const bound = (room: typeof rooms[number]) => explicitBindings.has(room.id) || !!room.device_binding_json && JSON.parse(room.device_binding_json).mode === rt.config.deviceMode;
+    rooms.sort((a, b) => Number(bound(b)) - Number(bound(a)));
+    for (let offset = 0; offset < rooms.length; offset += 4) await Promise.all(rooms.slice(offset, offset + 4).map(pollRoom));
   }
   async function authorizePhysical(roomId: string, commandId: string) {
     let controls;

@@ -26,7 +26,7 @@ export function createConciergeService(rt: Runtime) {
       await rt.db.query('INSERT INTO conversations(id,user_id,booking_id,title,created_at,updated_at,data) VALUES(?,?,?,?,?,?,?)').run(id, user.id, bookingId ?? null, bookingId ? 'Your reservation' : 'Find an office', now, now, '{}');
       await saveMessage(id, 'assistant', bookingId ? `I can help with your reservation, readiness, access instructions, or a replacement. ${CANCELLATION_POLICY}` : 'Tell me where and when you need an office, and your hourly budget. I can search inventory and prepare Checkout.', {}, `welcome:${id}`);
       return await ownConversation(user, id);
-    })();
+    }, `conversation:${user.id}:${bookingId ?? ""}`)();
   }
   async function saveMessage(conversationId: string, role: ChatMessage['role'], content: string, data: Record<string, unknown> = {}, idempotencyKey?: string): Promise<ChatMessage> {
     const id = uid('message'); const now = rt.clock.now();
@@ -41,14 +41,14 @@ export function createConciergeService(rt: Runtime) {
   }
   async function queueMessage(user: User, conversationId: string, content: string, idempotencyKey: string): Promise<ChatMessage> {
     await ownConversation(user, conversationId);
-    const existing = await rt.db.query('SELECT m.* FROM chat_messages m JOIN conversations c ON c.id=m.conversation_id WHERE m.idempotency_key=? AND c.user_id=?').get(`user:${user.id}:${idempotencyKey}`, user.id);
-    if (existing) { if ((existing as any).conversation_id !== conversationId) fail(409, 'This message request ID was already used in another conversation.'); return messageDto(existing); }
     return await rt.db.transaction(async () => {
+      const existing = await rt.db.query('SELECT m.* FROM chat_messages m JOIN conversations c ON c.id=m.conversation_id WHERE m.idempotency_key=? AND c.user_id=?').get(`user:${user.id}:${idempotencyKey}`, user.id);
+      if (existing) { if ((existing as any).conversation_id !== conversationId) fail(409, 'This message request ID was already used in another conversation.'); return messageDto(existing); }
       const message = await saveMessage(conversationId, 'user', content, {}, `user:${user.id}:${idempotencyKey}`);
       const event: DomainEvent = { version: 1, id: `chat:${message.id}`, type: 'concierge.message_requested', roomId: '', correlationId: message.id, revision: 0, idempotencyKey: message.id, occurredAt: rt.clock.now(), payload: { conversationId, messageId: message.id } };
       await enqueue(rt, event, 'concierge');
       return message;
-    })();
+    }, `message:${user.id}:${idempotencyKey}`)();
   }
   async function notify(userId: string, input: Omit<Notification, 'id' | 'userId' | 'createdAt'>, idempotencyKey?: string): Promise<Notification> {
     const id = uid('notification'); const now = rt.clock.now();

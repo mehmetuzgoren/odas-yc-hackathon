@@ -18,7 +18,7 @@ export async function recordChange(rt: Context, roomId: string, channel: string,
     await rt.db.query('INSERT INTO room_conversation_state(room_id,channel,signature,revision) VALUES(?,?,?,?) ON CONFLICT(room_id,channel) DO UPDATE SET signature=excluded.signature,revision=excluded.revision').run(roomId, channel, signature, revision);
     for (const { source, target, body, ...data } of messages) await rt.db.query('INSERT INTO room_conversation(room_id,source,target,body,occurred_at,data) VALUES(?,?,?,?,?,?)').run(roomId, source, target, body, rt.clock.now(), JSON.stringify(data));
     return true;
-  })();
+  }, `room-conversation:${roomId}:${channel}`)();
 }
 
 function fresh(state: RoomSnapshot, now: number) {
@@ -117,7 +117,7 @@ async function writeConciergeConversation(rt: Context, state: RoomSnapshot) {
   await rt.db.transaction(async () => {
     if (!(await recordChange(rt, state.roomId, 'concierge-input', candidate, state.revision, []))) return;
     await recordChange(rt, state.roomId, 'concierge', candidate, state.revision, messages);
-  })();
+  }, `room-conversation:${state.roomId}:concierge-input`)();
 }
 
 /** Serialize each room's model turns while Relay continues handling other rooms. */

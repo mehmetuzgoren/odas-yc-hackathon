@@ -19,15 +19,14 @@ export class Database {
     };
   }
 
-  transaction<T>(work: () => T | Promise<T>) {
+  transaction<T>(work: () => T | Promise<T>, key?: string) {
     return async (): Promise<T> => {
+      const run = (tx: TransactionSQL) => this.context.run(tx, async () => {
+        if (this.dialect === 'postgres' && key) await tx.unsafe('SELECT pg_advisory_xact_lock(hashtext($1))', [`${this.schema}:${key}`]);
+        return work();
+      });
       const current = this.context.getStore();
-      if (current) return current.savepoint(tx => this.context.run(tx, work)) as Promise<T>;
-      return this.sql.begin(async tx => {
-        // SQLite serialized these read-then-write transactions. Keep that guarantee across API instances.
-        if (this.dialect === 'postgres') await tx.unsafe('SELECT pg_advisory_xact_lock(hashtext($1))', [`odas:transaction:${this.schema}`]);
-        return this.context.run(tx, work);
-      }) as Promise<T>;
+      return (current ? current.savepoint(run) : this.sql.begin(run)) as Promise<T>;
     };
   }
 

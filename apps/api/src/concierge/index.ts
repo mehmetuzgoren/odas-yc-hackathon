@@ -95,7 +95,7 @@ export function createConciergeRoutes(rt: Runtime) {
       if (existing?.status === 'processing' && existing.updated_at > now - 300_000) fail(409, 'This event is already being processed.');
       await rt.db.query("INSERT INTO processed_messages(id,worker,event_id,status,created_at,updated_at) VALUES(?,?,?,'processing',?,?) ON CONFLICT(worker,event_id) DO UPDATE SET status='processing',error=NULL,updated_at=excluded.updated_at").run(key, body.worker, event.id, now, now);
       return { duplicate: false };
-    })();
+    }, `relay:${body.worker}:${event.id}`)();
     if (claim.duplicate) return c.json({ status: 'completed', result: claim.result, duplicate: true });
     try {
       const result = body.worker === 'operations' ? await rt.services.operations.processEvent(event) : await svc().processEvent(event);
