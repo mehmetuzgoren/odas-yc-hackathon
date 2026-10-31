@@ -55,6 +55,7 @@ interface DomainEvent {
     payload: Record<string, unknown>
 }
 interface Inspection {
+    scope?: "stage"
     id: string
     roomId: string
     source: "simulator" | "camera"
