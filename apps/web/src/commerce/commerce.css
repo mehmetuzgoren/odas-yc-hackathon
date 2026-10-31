@@ -1,0 +1,79 @@
+.commerce-auth { padding-top: 2rem; }
+.commerce-auth-layout { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(2rem, 7vw, 7rem); align-items: center; max-width: 1000px; margin: 3rem auto 5rem; }
+.commerce-auth-intro h1 { max-width: 8em; font-size: clamp(2.8rem, 5vw, 4.8rem); line-height: 1.06; margin: 1rem 0 1.5rem; }
+.commerce-auth-intro > p:not(.eyebrow) { font-size: 1.1rem; line-height: 1.7; max-width: 30rem; }
+.commerce-auth-note { display: flex; align-items: flex-start; gap: .8rem; margin-top: 2.5rem; font-size: .9rem; max-width: 25rem; color: #526451; }
+.commerce-auth-note svg { flex-shrink: 0; }
+.commerce-auth-form { display: grid; gap: 1.25rem; padding: 2rem; }
+.commerce-auth-form h2 { margin-top: 0; }
+.commerce-auth-form input { width: 100%; }
+.commerce-auth-form small { color: #5c645c; font-size: .85rem; }
+.commerce-auth-switch { text-align: center; margin: 0; font-size: .9rem; }
+.commerce-auth-switch a { font-weight: 600; margin-left: .35rem; }
+.commerce-title-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.commerce-title-row h1 { margin: .4rem 0 .75rem; }
+.commerce-title-row > .badge { flex-shrink: 0; }
+.commerce-reservation-list { display: grid; gap: 1rem; margin: 2rem 0 4rem; }
+.commerce-reservation-card { display: flex; align-items: center; gap: 1.5rem; padding: 1.5rem; }
+.commerce-reservation-symbol { display: grid; place-items: center; background: #e9eddf; color: #2e4a3b; border-radius: 8px; width: 6.5rem; height: 7rem; flex-shrink: 0; }
+.commerce-reservation-summary { flex: 1; min-width: 0; }
+.commerce-reservation-summary h2 { margin: 0; font-size: 1.5rem; }
+.commerce-reservation-summary h2 a { text-decoration: none; }
+.commerce-reservation-summary p { display: flex; gap: .5rem; align-items: center; margin: .6rem 0 0; font-size: .95rem; }
+.commerce-reservation-summary svg { flex-shrink: 0; }
+.commerce-reservation-price { display: flex; flex-direction: column; align-items: flex-end; gap: .6rem; margin-left: auto; min-width: 10rem; }
+.commerce-reservation-price strong { font-size: 1.4rem; }
+.commerce-reservation-price span { color: #5f665e; font-size: .9rem; }
+.commerce-reservation-price a { display: flex; align-items: center; gap: .35rem; font-size: .9rem; }
+.commerce-empty { text-align: center; padding: 3rem 1.5rem; margin: 2rem 0; }
+.commerce-empty > svg { color: #2e4a3b; }
+.commerce-empty .button { margin-top: .7rem; }
+.commerce-detail > .back-link { margin-bottom: 2rem; display: inline-flex; }
+.commerce-detail-grid { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(290px, 1fr); gap: 2rem; margin: 2rem 0 4rem; align-items: start; }
+.commerce-detail-main { display: grid; gap: 1.5rem; }
+.commerce-detail-main > .card, .commerce-payment { padding: 1.75rem; }
+.commerce-detail h2 { margin: 0 0 1.25rem; font-size: 1.55rem; }
+.commerce-facts { margin: 0; }
+.commerce-facts > div { display: grid; grid-template-columns: minmax(6rem, 1fr) minmax(0, 2fr); gap: 1rem; padding: .7rem 0; }
+.commerce-facts dt { color: #5c645c; }
+.commerce-facts dd { margin: 0; overflow-wrap: anywhere; }
+.commerce-booking-id { font-family: ui-monospace, monospace; font-size: .85rem; }
+.commerce-action-row { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 1.3rem; }
+.commerce-action-row .button { white-space: normal; }
+.commerce-readiness { display: flex; align-items: center; gap: .6rem; font-weight: 600; }
+.commerce-status-dot { height: .6rem; width: .6rem; border-radius: 50%; background: #9c7524; }
+.readiness-ready .commerce-status-dot { background: #2e4a3b; }
+.commerce-small { font-size: .875rem; line-height: 1.6; }
+.commerce-access { white-space: pre-wrap; line-height: 1.7; }
+.commerce-payment .commerce-facts > div { grid-template-columns: 1fr auto; }
+.commerce-payment .button { margin-top: .75rem; width: 100%; }
+.commerce-payment .commerce-small { display: flex; align-items: center; gap: .4rem; }
+.commerce-total { font-weight: 600; border-top: 1px solid #dedfd4; margin-top: .75rem; padding-top: 1rem !important; font-size: 1.15rem; }
+.commerce-total dt { color: #262c27; }
+.commerce-policy { padding: 1.75rem .5rem; font-size: .9rem; line-height: 1.6; }
+.commerce-policy h2 { font-size: 1.15rem; }
+.commerce-text-button { background: transparent; border: 0; padding: .6rem 0; color: #8c382b; text-decoration: underline; text-underline-offset: .2rem; cursor: pointer; font: inherit; }
+.commerce-cancel-confirm { border-top: 1px solid #dedfd4; margin-top: 1rem; padding-top: .5rem; }
+.button.danger { background: #873d30; color: white; border-color: #873d30; }
+.commerce-offer { background: #edf0e2; border: 1px solid #b8c3aa; padding: 1.75rem; border-radius: 12px; }
+.commerce-offer h3 { font-size: 1.5rem; margin: .5rem 0; }
+.commerce-offer li { margin: .4rem 0; }
+.commerce-detail .success, .commerce-detail .error { margin-top: 1rem; }
+.commerce-detail [tabindex="-1"]:focus { outline: none; }
+@media (max-width: 800px) {
+ .commerce-auth-layout { grid-template-columns: 1fr; gap: 1.5rem; margin-top: 1.5rem; max-width: 28rem; }
+ .commerce-auth-intro h1 { max-width: none; font-size: 2.7rem; }
+ .commerce-auth-note { margin-top: 1rem; }
+ .commerce-detail-grid { grid-template-columns: 1fr; gap: 1rem; }
+ .commerce-reservation-card { align-items: flex-start; flex-wrap: wrap; gap: 1rem; }
+ .commerce-reservation-symbol { width: 4rem; height: 5rem; }
+ .commerce-reservation-price { width: 100%; flex-direction: row; align-items: center; justify-content: flex-end; padding-top: .8rem; border-top: 1px solid #e1e1d7; }
+ .commerce-reservation-price a { margin-left: auto; }
+}
+@media (max-width: 480px) {
+ .commerce-title-row { align-items: flex-start; flex-wrap: wrap; }
+ .commerce-auth-form, .commerce-detail-main > .card, .commerce-payment, .commerce-offer { padding: 1.25rem; }
+ .commerce-reservation-symbol { display: none; }
+ .commerce-facts > div { grid-template-columns: 1fr; gap: .25rem; }
+ .commerce-payment .commerce-facts > div { grid-template-columns: 1fr auto; }
+}
