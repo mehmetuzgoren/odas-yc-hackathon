@@ -2,6 +2,7 @@ import type { ChatMessage, DomainEvent, Notification, ReplacementOffer, User } f
 import { CANCELLATION_POLICY, TIMEZONE } from '@odas/contracts';
 import { audit, enqueue, fail, parseJSON, uid, userById, type Runtime } from '../core';
 import { answerWithModel, answerWithRules, conciergeMode, type ConciergeReply } from './model';
+import { modelStatus } from '../ai';
 import { createConciergeTools, type ToolName } from './tools';
 import { recordConciergeConversation } from '../operations/conversation';
 
@@ -77,13 +78,12 @@ export function createConciergeService(rt: Runtime) {
       reply = { content: error instanceof Error ? `I could not complete this request: ${error.message}` : 'I could not complete this request. Please try again.' };
     }
     const { content, ...data } = reply;
-    const saved = saveMessage(conversationId, 'assistant', content, { ...data, mode: conciergeMode() }, `reply:${messageId}`);
+    const saved = saveMessage(conversationId, 'assistant', content, { ...data, ...modelStatus() }, `reply:${messageId}`);
     return { messageId: saved.id, mode: conciergeMode() };
   }
   async function processDisruption(event: DomainEvent) {
     if (!event.roomId) return { ignored: true };
     const room = await rt.rooms.snapshot(event.roomId);
-    await recordConciergeConversation(rt, room);
     const candidates = event.bookingId
       ? rt.db.query("SELECT * FROM reservations WHERE id=? AND room_id=? AND status IN ('confirmed','checked_in')").all(event.bookingId, event.roomId)
       : rt.db.query("SELECT * FROM reservations WHERE room_id=? AND status IN ('confirmed','checked_in') AND end_at>? AND start_at<?").all(event.roomId, rt.clock.now(), rt.clock.now() + 24 * 3600_000);
@@ -108,6 +108,10 @@ export function createConciergeService(rt: Runtime) {
       })();
       audit(rt, 'concierge-worker', 'disruption.offered', candidate.id, { eventId: event.id, offerId: offer?.id ?? null }); count++;
     }
+    // Optional narration must not block Relay acknowledgements or worker heartbeats.
+    const conversation = recordConciergeConversation(rt, room);
+    if (modelStatus().mode === 'model') void conversation.catch(() => console.warn('[room-conversation] Could not save the room exchange; retry on the next room event.'));
+    else await conversation;
     return { notified: count };
   }
   async function processEvent(event: DomainEvent): Promise<unknown> {

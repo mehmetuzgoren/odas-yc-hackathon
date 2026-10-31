@@ -29,7 +29,9 @@ Set Stripe sandbox credentials in `.env` or the ignored `.data/private/stripe.en
 
 Cancellation defaults to a full refund before the start, and a full service-disruption refund if the reserved or accepted replacement cannot be provided. Ordinary cancellation after check-in requires operator review. Set `CANCELLATION_POLICY_TEXT` only with a matching policy implementation; changing text alone does not change the refund rules. `CHECK_IN_WINDOW_MINUTES`, `TURNOVER_BUFFER_MINUTES`, and `CLEANING_ESTIMATE_MINUTES` configure the relevant defaults. Keep actor environment values aligned with the API when deploying managed actors.
 
-The concierge runs in clearly identified development rules mode by default, through the same actual domain tools and Relay workers as model mode. To use a real model, set `CONCIERGE_MODE=model`, `MODEL_API_KEY`, `MODEL_NAME`, and optionally `MODEL_BASE_URL`. Model responses cannot directly change storage, readiness, or robot commands. Financial and replacement actions require explicit guest confirmation.
+Without an API key, conversations run in labeled development rules mode through the same domain tools and Relay workers as model mode. Set `OPENAI_API_KEY` and `CONCIERGE_MODE=model` to use OpenAI's `gpt-6-luna` for guest concierge replies and the concierge/room-agent exchanges on the demo page. `CONCIERGE_MODEL` can override the model; `CONCIERGE_MODEL_BASE_URL` can override the Responses API base URL. Existing `MODEL_API_KEY`, `MODEL_NAME`, and `MODEL_BASE_URL` aliases still work. Model replies cannot directly change storage, readiness, or robot commands. Financial and replacement actions require explicit guest confirmation.
+
+The demo labels generated messages with their model and keeps inspection and robot events labeled separately. Each room exchange uses verified room facts and the native actor's inventory decision. Repeated observations do not trigger new model calls. Provider failures show a labeled rules fallback; guest chat failures remain explicit. Secrets stay in the ignored server-side `.env`.
 
 ## Verify
 
