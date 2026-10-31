@@ -14,6 +14,8 @@ import { createCatalogService } from '../catalog/service';
 import { createCommerceService } from './service';
 import { createCommerceRoutes } from './index';
 import type { Reservation, User } from '@odas/contracts';
+import { seed } from '../../../../scripts/seed';
+import { seedReservations } from '../../../../scripts/seed-reservations';
 
 export async function runCommerceIntegration() {
   if (!process.env.TERSE_ACTOR_URL?.includes(':7111/')) throw new Error('Run commerce checks with the isolated native actor runtime on port 7111.');
@@ -208,6 +210,30 @@ export async function runCommerceIntegration() {
   } finally {
     config.deviceMode = originalMode; config.deviceUrl = originalDeviceUrl; deviceFixture.stop(true);
   }
+
+  // Rows alone do not reserve native actor inventory; cover both stores and reruns.
+  await seed(db, config.dataDir);
+  const demoDate = Temporal.Instant.fromEpochMilliseconds(now).toZonedDateTimeISO('America/Los_Angeles').toPlainDate().add({ days: 1 }).toString();
+  const firstRooms = (db.query("SELECT id FROM offices WHERE id LIKE '%-office-01'").all() as { id: string }[]);
+  const firstIntervals = await Promise.all(firstRooms.map(async room => (await rt.rooms.snapshot(room.id)).intervals));
+  const protectedStart = Temporal.ZonedDateTime.from(`${demoDate}T15:00[America/Los_Angeles]`).epochMilliseconds;
+  const protectedQuote = await commerce.quote(auth.user, { roomId: 'polk-310-office-03', startAt: protectedStart, endAt: protectedStart + 2 * 3_600_000 });
+  const protectedBooking = await commerce.hold(auth.user, protectedQuote.id);
+  const seeded = await seedReservations(rt, { date: demoDate, days: 1 });
+  assert.equal(seeded.rooms, 25); assert.ok(seeded.created > 0); assert.equal(seeded.conflicts.length, 1);
+  assert.equal((await rt.rooms.snapshot(protectedBooking.roomId)).intervals.find(value => value.bookingId === protectedBooking.id)?.status, 'held');
+  const again = await seedReservations(rt, { date: demoDate, days: 1 });
+  assert.equal(again.created, 0); assert.equal(again.existing, seeded.created);
+  for (const [index, room] of firstRooms.entries()) assert.deepEqual((await rt.rooms.snapshot(room.id)).intervals, firstIntervals[index]);
+  const demo = db.query("SELECT * FROM reservations WHERE room_id='polk-310-office-02' AND payment_status='demo' AND status='confirmed' ORDER BY start_at LIMIT 1").get() as any;
+  assert.ok(demo); assert.equal(demo.payment_intent_id, null); assert.equal(demo.checkout_session_id, null);
+  assert.equal((await rt.rooms.snapshot(demo.room_id)).intervals.find(value => value.bookingId === demo.id)?.status, 'confirmed');
+  assert.equal((await rt.services.catalog.office(demo.room_id, { startAt: demo.start_at, endAt: demo.end_at })).available, false);
+  await assert.rejects(commerce.quote(auth.user, { roomId: demo.room_id, startAt: demo.start_at, endAt: demo.end_at }), (e: any) => e.status === 409 && e.code === 'unavailable');
+  const competing = await rt.rooms.command(demo.room_id, { id: `demo-competing-${run}`, type: 'hold', bookingId: `competing-${run}`, startAt: demo.start_at, endAt: demo.end_at, expiresAt: now + 60_000, now });
+  assert.equal(competing.ok, false); assert.equal(competing.code, 'unavailable');
+  assert.equal(await rt.rooms.available('polk-310-office-01', demo.start_at, demo.end_at), true);
+  pass('demo schedule seeds confirmed native reservations, rejects overlapping quotes and holds, preserves other bookings and first rooms, and reruns without duplicates or payments');
   db.close();
   console.log(JSON.stringify({ checks: checks.length, dataDir: config.dataDir, actorUrl: process.env.TERSE_ACTOR_URL, paymentEvidence: config.stripeSecretKey ? 'real sandbox Checkout and expiration; successful payment/refund not exercised here' : 'not configured' }));
   return checks;

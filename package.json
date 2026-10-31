@@ -12,6 +12,7 @@
     "dev": "bun scripts/dev.ts",
     "start": "bun scripts/start.ts",
     "seed": "bun scripts/seed.ts",
+    "seed:reservations": "bun scripts/seed-reservations.ts",
     "build": "bun run --cwd apps/web build",
     "typecheck": "tsc --noEmit",
     "check": "bun run typecheck && bun run build",
