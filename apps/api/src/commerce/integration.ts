@@ -67,7 +67,7 @@ export async function runCommerceIntegration() {
   const q2 = await commerce.quote(auth.user, { roomId: roomA, startAt: start, endAt: end });
   assert.equal(q1.subtotalCents, 1000); assert.equal(q1.feeCents, 100); assert.equal(q1.totalCents, 1100);
   assert.ok(q1.cancellationPolicy.includes('Full refund'));
-  const raced = await Promise.allSettled([await commerce.hold(auth.user, q1.id), await commerce.hold(auth.user, q2.id)]);
+  const raced = await Promise.allSettled([commerce.hold(auth.user, q1.id), commerce.hold(auth.user, q2.id)]);
   assert.equal(raced.filter(r => r.status === 'fulfilled').length, 1);
   const winner = (raced.find(r => r.status === 'fulfilled') as PromiseFulfilledResult<Reservation>).value;
   const retry = await commerce.hold(auth.user, winner.quoteId);
