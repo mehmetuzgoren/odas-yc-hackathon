@@ -26,12 +26,12 @@ export async function seedReservations(rt: Pick<Runtime, 'db' | 'rooms' | 'clock
   const offices: { id: string; workspace: Workspace; rateCents: number }[] = [];
   for (const [groupId, , , count] of inventory) for (let number = 2; number <= count; number++) {
     const id = `${groupId}-office-${String(number).padStart(2, '0')}`;
-    const row = rt.db.query('SELECT g.*,COALESCE(o.rate_cents,g.base_rate_cents) AS rate FROM offices o JOIN workspace_groups g ON g.id=o.group_id WHERE o.id=? AND o.modeled=1 AND g.modeled=1').get(id) as Record<string, any> | null;
+    const row = await rt.db.query('SELECT g.*,COALESCE(o.rate_cents,g.base_rate_cents) AS rate FROM offices o JOIN workspace_groups g ON g.id=o.group_id WHERE o.id=? AND o.modeled=1 AND g.modeled=1').get(id) as Record<string, any> | null;
     if (row) offices.push({ id, workspace: mapWorkspace(row), rateCents: row.rate });
   }
-  if (!rt.db.query('SELECT id FROM users WHERE id=?').get(GUEST)) {
+  if (!(await rt.db.query('SELECT id FROM users WHERE id=?').get(GUEST))) {
     const hash = await Bun.password.hash(crypto.randomUUID(), { algorithm: 'argon2id', memoryCost: 19456, timeCost: 2 });
-    rt.db.query("INSERT INTO users(id,email,password_hash,name,role,test_account,created_at) VALUES(?,?,?,?,'guest',1,?)")
+    await rt.db.query("INSERT INTO users(id,email,password_hash,name,role,test_account,created_at) VALUES(?,?,?,?,'guest',1,?)")
       .run(GUEST, 'host-dashboard-demo@odas.local', hash, 'Demo guest', rt.clock.now());
   }
   const result = { date: firstDate.toString(), days, rooms: offices.length, created: 0, existing: 0, elapsed: 0, outsideHours: 0, conflicts: [] as string[] };
@@ -44,7 +44,7 @@ export async function seedReservations(rt: Pick<Runtime, 'db' | 'rooms' | 'clock
       if (!isWithinHours(office.workspace, startAt, endAt)) { result.outsideHours++; continue; }
       const key = `${FIXTURE}:${office.id}:${date}:${start}`;
       const id = `demo_${new Bun.CryptoHasher('sha256').update(key).digest('hex').slice(0, 24)}`;
-      const existing = rt.db.query('SELECT status,data FROM reservations WHERE id=?').get(id) as { status: string; data: string } | null;
+      const existing = await rt.db.query('SELECT status,data FROM reservations WHERE id=?').get(id) as { status: string; data: string } | null;
       if (existing && (JSON.parse(existing.data).fixture !== FIXTURE || !['held', 'confirmed'].includes(existing.status))) {
         result.conflicts.push(`${office.id} ${date} ${start}: existing reservation was changed; preserved`); continue;
       }
@@ -52,10 +52,10 @@ export async function seedReservations(rt: Pick<Runtime, 'db' | 'rooms' | 'clock
       const subtotal = Math.round(office.rateCents * (endAt - startAt) / 3_600_000);
       const fee = Math.round(subtotal / 10);
       const data = JSON.stringify({ fixture: FIXTURE, synthetic: true, fundingSource: 'Demo reservation; no Stripe charge', workflow: 'demo_seed' });
-      if (!existing) rt.db.transaction(() => {
-        rt.db.query('INSERT INTO quotes(id,user_id,room_id,start_at,end_at,rate_cents,subtotal_cents,fee_cents,total_cents,currency,expires_at,data) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)')
+      if (!existing) await rt.db.transaction(async () => {
+        await rt.db.query('INSERT INTO quotes(id,user_id,room_id,start_at,end_at,rate_cents,subtotal_cents,fee_cents,total_cents,currency,expires_at,data) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)')
           .run(`quote_${id}`, GUEST, office.id, startAt, endAt, office.rateCents, subtotal, fee, subtotal + fee, 'usd', now + HOLD_MS, data);
-        rt.db.query("INSERT INTO reservations(id,user_id,room_id,original_room_id,group_id,quote_id,start_at,end_at,subtotal_cents,fee_cents,total_cents,currency,status,payment_status,refund_status,hold_expires_at,idempotency_key,created_at,updated_at,data) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,'held','demo','none',?,?,?,?,?)")
+        await rt.db.query("INSERT INTO reservations(id,user_id,room_id,original_room_id,group_id,quote_id,start_at,end_at,subtotal_cents,fee_cents,total_cents,currency,status,payment_status,refund_status,hold_expires_at,idempotency_key,created_at,updated_at,data) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,'held','demo','none',?,?,?,?,?)")
           .run(id, GUEST, office.id, office.id, office.workspace.id, `quote_${id}`, startAt, endAt, subtotal, fee, subtotal + fee, 'usd', now + HOLD_MS, key, now, now, data);
       })();
       const interval = (await rt.rooms.snapshot(office.id)).intervals.find(value => value.bookingId === id);
@@ -64,13 +64,13 @@ export async function seedReservations(rt: Pick<Runtime, 'db' | 'rooms' | 'clock
       } else {
         const held = await rt.rooms.command(office.id, { id: `${id}:seed-hold:${crypto.randomUUID()}`, type: 'hold', bookingId: id, startAt, endAt, expiresAt: rt.clock.now() + HOLD_MS, now: rt.clock.now() });
         if (!held.ok) {
-          rt.db.query("UPDATE reservations SET status='canceled',hold_expires_at=NULL,updated_at=? WHERE id=? AND status='held'").run(rt.clock.now(), id);
+          await rt.db.query("UPDATE reservations SET status='canceled',hold_expires_at=NULL,updated_at=? WHERE id=? AND status='held'").run(rt.clock.now(), id);
           result.conflicts.push(`${office.id} ${date} ${start}: ${held.message || held.code}`); continue;
         }
         const confirmed = await rt.rooms.command(office.id, { id: `${id}:seed-confirm:${crypto.randomUUID()}`, type: 'confirm', bookingId: id, now: rt.clock.now() });
         if (!confirmed.ok) throw new Error(`Could not confirm ${id}: ${confirmed.message || confirmed.code}. Rerun to resume.`);
       }
-      rt.db.query("UPDATE reservations SET status='confirmed',hold_expires_at=NULL,revision=revision+1,updated_at=? WHERE id=? AND status='held'").run(rt.clock.now(), id);
+      await rt.db.query("UPDATE reservations SET status='confirmed',hold_expires_at=NULL,revision=revision+1,updated_at=? WHERE id=? AND status='held'").run(rt.clock.now(), id);
       result.created++;
     }
   }
@@ -82,10 +82,10 @@ if (import.meta.main) {
   const config = loadConfig();
   if (process.env.NODE_ENV === 'production' || config.namespace !== 'development' && !config.testMode) throw new Error('Demo reservations require the development or an isolated test namespace.');
   const { createRoomGateway } = await import('../apps/api/src/operations/gateway');
-  const db = openDatabase(config.dataDir);
+  const db = await openDatabase(config.dataDir);
   try {
     await seed(db, config.dataDir);
     const result = await seedReservations({ db, clock: createClock(config), rooms: createRoomGateway() }, { date: values.date, days: values.days === undefined ? undefined : Number(values.days) });
     console.log(JSON.stringify(result, null, 2));
-  } finally { db.close(); }
+  } finally { await db.close(); }
 }

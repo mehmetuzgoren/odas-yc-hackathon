@@ -8,7 +8,7 @@ mkdirSync(join(root, '.data'), { recursive: true });
 const dataDir = mkdtempSync(join(root, '.data/test-integration-'));
 const secret = crypto.randomUUID() + crypto.randomUUID();
 const running = new Set<ChildProcess>();
-const sensitive = new Set([secret, ...Object.entries(process.env).filter(([key]) => /KEY|TOKEN|SECRET|PASSWORD/.test(key)).map(([, value]) => value).filter((value): value is string => !!value && value.length > 5)]);
+const sensitive = new Set([secret, ...Object.entries(process.env).filter(([key]) => /KEY|TOKEN|SECRET|PASSWORD|DATABASE_URL/.test(key)).map(([, value]) => value).filter((value): value is string => !!value && value.length > 5)]);
 const pause = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 function redact(input: string) {
   let value = input;

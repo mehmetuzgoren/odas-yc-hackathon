@@ -27,22 +27,22 @@ export function createCommerceRoutes(rt: Runtime) {
   const secure = rt.config.origin.startsWith('https://');
   const cookieOptions = { path: '/', sameSite: 'Lax' as const, secure, maxAge: 30 * 86400 };
 
-  function rateLimit(address: string, action: string) {
+  async function rateLimit(address: string, action: string) {
     const key = `auth:${action}:${sha(address)}`;
     const now = rt.clock.now();
-    rt.db.query('INSERT INTO auth_attempts(key,count,reset_at) VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET count=CASE WHEN reset_at<=? THEN 1 ELSE count+1 END,reset_at=CASE WHEN reset_at<=? THEN ? ELSE reset_at END')
+    await rt.db.query('INSERT INTO auth_attempts(key,count,reset_at) VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET count=CASE WHEN auth_attempts.reset_at<=? THEN 1 ELSE auth_attempts.count+1 END,reset_at=CASE WHEN auth_attempts.reset_at<=? THEN ? ELSE auth_attempts.reset_at END')
       .run(key, now + 15 * 60_000, now, now, now + 15 * 60_000);
-    const row = rt.db.query('SELECT count FROM auth_attempts WHERE key=?').get(key) as any;
+    const row = await rt.db.query('SELECT count FROM auth_attempts WHERE key=?').get(key) as any;
     if (row.count > 12) fail(429, 'Too many sign-in attempts. Please try again in 15 minutes.', 'rate_limited');
   }
 
-  function session(c: Context, user: User) {
+  async function session(c: Context, user: User) {
     const prior = getCookie(c, 'odas_session');
-    if (prior) rt.db.query('DELETE FROM sessions WHERE id_hash=?').run(sha(prior));
+    if (prior) await rt.db.query('DELETE FROM sessions WHERE id_hash=?').run(sha(prior));
     const token = random();
     const csrfToken = random();
     const now = rt.clock.now();
-    rt.db.query('INSERT INTO sessions(id_hash,user_id,expires_at,csrf_token,created_at) VALUES(?,?,?,?,?)').run(sha(token), user.id, now + 30 * 86400_000, csrfToken, now);
+    await rt.db.query('INSERT INTO sessions(id_hash,user_id,expires_at,csrf_token,created_at) VALUES(?,?,?,?,?)').run(sha(token), user.id, now + 30 * 86400_000, csrfToken, now);
     setCookie(c, 'odas_session', token, { ...cookieOptions, httpOnly: true });
     setCookie(c, 'odas_csrf', csrfToken, { ...cookieOptions, httpOnly: false });
     return { user, csrfToken };
@@ -54,7 +54,7 @@ export function createCommerceRoutes(rt: Runtime) {
     let csrfToken: string;
     if (user) {
       const token = getCookie(c, 'odas_session')!;
-      const record = rt.db.query('SELECT csrf_token FROM sessions WHERE id_hash=?').get(sha(token)) as any;
+      const record = await rt.db.query('SELECT csrf_token FROM sessions WHERE id_hash=?').get(sha(token)) as any;
       csrfToken = record.csrf_token;
       setCookie(c, 'odas_csrf', csrfToken, { ...cookieOptions, httpOnly: false });
     } else {
@@ -67,33 +67,33 @@ export function createCommerceRoutes(rt: Runtime) {
 
   app.post('/auth/signup', async c => {
     const input = await body(c, signup);
-    rateLimit(input.email, 'signup');
-    const existing = rt.db.query('SELECT 1 FROM users WHERE email=?').get(input.email);
+    await rateLimit(input.email, 'signup');
+    const existing = await rt.db.query('SELECT 1 FROM users WHERE email=?').get(input.email);
     if (existing) fail(409, 'An account already uses this email. Try signing in.', 'email_registered');
     const passwordHash = await Bun.password.hash(input.password, { algorithm: 'argon2id', memoryCost: 65536, timeCost: 3 });
     const user: User = { id: uid('user'), email: input.email, name: input.name, role: 'guest', testAccount: false };
     try {
-      rt.db.query('INSERT INTO users(id,email,password_hash,name,role,test_account,created_at) VALUES(?,?,?,?,\'guest\',0,?)').run(user.id, user.email, passwordHash, user.name, rt.clock.now());
+      await rt.db.query('INSERT INTO users(id,email,password_hash,name,role,test_account,created_at) VALUES(?,?,?,?,\'guest\',0,?)').run(user.id, user.email, passwordHash, user.name, rt.clock.now());
     } catch { fail(409, 'An account already uses this email. Try signing in.', 'email_registered'); }
-    audit(rt, user.id, 'account.created', user.id);
-    return c.json(session(c, user), 201);
+    await audit(rt, user.id, 'account.created', user.id);
+    return c.json(await session(c, user), 201);
   });
 
   app.post('/auth/login', async c => {
     const input = await body(c, credentials);
-    rateLimit(input.email, 'login');
-    const row = rt.db.query('SELECT * FROM users WHERE email=?').get(input.email) as any;
+    await rateLimit(input.email, 'login');
+    const row = await rt.db.query('SELECT * FROM users WHERE email=?').get(input.email) as any;
     const correct = await Bun.password.verify(input.password, row?.password_hash || await dummyHash);
     if (!row || !correct) fail(401, 'The email or password is incorrect.', 'invalid_credentials');
     const user: User = { id: row.id, email: row.email, name: row.name, role: row.role, testAccount: !!row.test_account };
-    rt.db.query('DELETE FROM auth_attempts WHERE key=?').run(`auth:login:${sha(input.email)}`);
-    audit(rt, user.id, 'account.signed_in', user.id);
-    return c.json(session(c, user));
+    await rt.db.query('DELETE FROM auth_attempts WHERE key=?').run(`auth:login:${sha(input.email)}`);
+    await audit(rt, user.id, 'account.signed_in', user.id);
+    return c.json(await session(c, user));
   });
 
   app.post('/auth/logout', async c => {
     const token = getCookie(c, 'odas_session');
-    if (token) rt.db.query('DELETE FROM sessions WHERE id_hash=?').run(sha(token));
+    if (token) await rt.db.query('DELETE FROM sessions WHERE id_hash=?').run(sha(token));
     deleteCookie(c, 'odas_session', { path: '/', secure });
     const csrfToken = random();
     setCookie(c, 'odas_csrf', csrfToken, { ...cookieOptions, httpOnly: false });

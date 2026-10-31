@@ -23,7 +23,11 @@ Provision an operator separately with `bun run operator:create --email operator@
 
 ## Configure
 
-Copy `.env.example` to `.env` for overrides. Default development secrets are generated privately under `DATA_DIR`. Keep that directory to preserve accounts, sessions, conversations, Relay identities, and native actor state. Use a different `DATA_DIR`, namespace, and ports for each isolated run.
+Copy `.env.example` to `.env`. Set `DATABASE_URL` to the Supabase Postgres connection from **Connect → Direct → Session pooler**, with the password percent-encoded and `?sslmode=verify-full`. Set `DATABASE_CA_FILE=deploy/certs/supabase-ca.crt` to verify the Supabase certificate. The API, seed commands, and workers access application records in the private `odas` schema through the server; credentials never go to the browser. Existing password login and sessions continue to work.
+
+To move an existing database, stop the development stack, then run `bun run db:migrate-sqlite -- .data/development/odas.sqlite` before restarting `bun run dev`. The command keeps a consistent SQLite backup under `.data/private`, imports all records in one transaction, compares every field, and resets message sequences. It refuses to overwrite a destination containing application data. Keep the backup for recovery.
+
+`DATA_DIR` still holds Relaycast, device state, private runtime secrets, and local native actor storage. Preserve it across restarts. Production requires `DATABASE_URL`; development without one uses SQLite. Tests use separate schemas through `TEST_DATABASE_URL` and never use the application schema. Without a test URL they use isolated SQLite fixtures. CI runs the existing integration and scenario checks against a PostgreSQL service.
 
 Set Stripe sandbox credentials in `.env` or the ignored `.data/private/stripe.env`. This release accepts test credentials, including claimable sandbox restricted keys, and rejects live keys. Checkout uses dynamic payment methods, integer server prices, and a 10% service fee. A redirect starts server reconciliation and never proves payment. For local signed webhook delivery, use the Stripe CLI against `/api/payments/webhook` and set the listener's signing secret privately. The deployed webhook uses its configured signing secret.
 

@@ -39,8 +39,8 @@ export function createOperationsService(rt: Runtime): OperationsService {
     await drainRoom(roomId, result.snapshot);
     return result.snapshot;
   }
-  function recordObservation(roomId: string, kind: string, id: string, at: number, data: unknown) {
-    rt.db.query('INSERT OR IGNORE INTO device_observations(id,room_id,kind,observed_at,data) VALUES(?,?,?,?,?)').run(id, roomId, kind, at, JSON.stringify(data));
+  async function recordObservation(roomId: string, kind: string, id: string, at: number, data: unknown) {
+    await rt.db.query('INSERT OR IGNORE INTO device_observations(id,room_id,kind,observed_at,data) VALUES(?,?,?,?,?)').run(id, roomId, kind, at, JSON.stringify(data));
   }
   async function demoStatus(roomId: string, changes?: { jevEnabled?: boolean; roboEnabled?: boolean }) {
     const base = String(rt.config.deviceUrl || process.env.DEVICE_URL || `http://127.0.0.1:${process.env.DEVICE_PORT || 7300}`);
@@ -59,14 +59,14 @@ export function createOperationsService(rt: Runtime): OperationsService {
     if (!await roboEnabled(roomId)) fail(409, 'Robo cleaning is disabled. Enable Robo on /demo first.', 'robo_disabled');
   }
   async function recordInspection(observation: Inspection) {
-    recordObservation(observation.roomId, 'inspection', observation.id, observation.capturedAt, observation);
+    await recordObservation(observation.roomId, 'inspection', observation.id, observation.capturedAt, observation);
     const result = await rt.rooms.command(observation.roomId, { id: `inspection:${observation.id}`, type: 'inspect', now: now(), inspection: observation });
     await drainRoom(observation.roomId, result.snapshot);
     return result;
   }
   async function observeInspection(observation: Inspection) {
     if (rt.config.deviceMode !== 'physical' || observation.source !== 'camera' || !explicitBindings.has(observation.roomId)) fail(403, 'This office has no configured physical camera binding.');
-    return recordInspection(observation);
+    return await recordInspection(observation);
   }
   async function inspect(roomId: string) {
     let observation: Inspection;
@@ -75,34 +75,34 @@ export function createOperationsService(rt: Runtime): OperationsService {
       const previous = await rt.rooms.snapshot(roomId);
       observation = { id: uid('inspection'), roomId, source: rt.config.deviceMode === 'simulator' ? 'simulator' : 'camera', capturedAt: now(), inferredAt: now(), sequence: Math.max(Date.now() * 1000, (previous.inspection?.sequence || 0) + 1), occupancy: 'unknown', confidence: 0, floor: 'unknown', surfaces: 'unknown', connection: 'disconnected', error: 'Camera or inspection provider is unavailable; connection requires verification.' };
     }
-    return recordInspection(observation);
+    return await recordInspection(observation);
   }
   async function telemetry(roomId: string) {
     let observation: DeviceTelemetry;
     try { observation = await device.telemetry(roomId); }
     catch { observation = { roomId, source: rt.config.deviceMode === 'simulator' ? 'simulator' : 'roborock', observedAt: now(), connection: 'disconnected', state: 'unknown', error: 'The backend device worker or robot cloud connection is unavailable.' }; }
-    recordObservation(roomId, 'telemetry', `${roomId}:telemetry:${observation.observedAt}`, observation.observedAt, observation);
+    await recordObservation(roomId, 'telemetry', `${roomId}:telemetry:${observation.observedAt}`, observation.observedAt, observation);
     const result = await rt.rooms.command(roomId, { id: uid('telemetry'), type: 'telemetry', now: now(), telemetry: observation });
     await drainRoom(roomId, result.snapshot);
     return result.snapshot;
   }
   async function attention(roomId: string, snapshot: RoomSnapshot) {
     for (const reason of snapshot.attentionReasons) {
-      const existing = rt.db.query("SELECT id FROM attention_tasks WHERE room_id=? AND reason=? AND status!='resolved'").get(roomId, reason);
-      if (!existing) rt.db.query("INSERT INTO attention_tasks(id,room_id,reason,status,created_at,data) VALUES(?,?,?,'open',?,?)").run(uid('task'), roomId, reason, now(), JSON.stringify({ roomRevision: snapshot.revision, source: snapshot.inspection?.source || 'unverified' }));
+      const existing = await rt.db.query("SELECT id FROM attention_tasks WHERE room_id=? AND reason=? AND status!='resolved'").get(roomId, reason);
+      if (!existing) await rt.db.query("INSERT INTO attention_tasks(id,room_id,reason,status,created_at,data) VALUES(?,?,?,'open',?,?)").run(uid('task'), roomId, reason, now(), JSON.stringify({ roomRevision: snapshot.revision, source: snapshot.inspection?.source || 'unverified' }));
     }
   }
   async function drainRoom(roomId: string, snapshot?: RoomSnapshot) {
     const state = snapshot || await rt.rooms.snapshot(roomId);
-    recordRoomConversation(rt, state);
+    await recordRoomConversation(rt, state);
     if (state.events.length) {
-      rt.db.transaction(() => { for (const event of state.events) { enqueue(rt, event, 'operations'); enqueue(rt, event, 'concierge'); } })();
+      await rt.db.transaction(async () => { for (const event of state.events) { await enqueue(rt, event, 'operations'); await enqueue(rt, event, 'concierge'); } })();
       await rt.rooms.command(roomId, { id: `ack:${state.events.map(e => e.id).join('|')}`, now: now(), type: 'ack_events', eventIds: state.events.map(e => e.id) });
     }
     await attention(roomId, state);
   }
   async function drain() {
-    const rooms = rt.db.query('SELECT id FROM offices').all() as { id: string }[];
+    const rooms = await rt.db.query('SELECT id FROM offices').all() as { id: string }[];
     for (const { id } of rooms) await drainRoom(id);
   }
   async function dispatch(roomId: string, event: DomainEvent) {
@@ -123,41 +123,41 @@ export function createOperationsService(rt: Runtime): OperationsService {
     await drainRoom(roomId, auth.snapshot);
     if (!auth.ok) return { rejected: auth.code };
     const commandId = auth.snapshot.job!.commandId;
-    const inserted = rt.db.query("INSERT OR IGNORE INTO device_commands(id,room_id,kind,status,job_id,created_at,updated_at,data) VALUES(?,?,?,'dispatching',?,?,?,'{}')").run(commandId, roomId, 'start', job.id, now(), now());
+    const inserted = await rt.db.query("INSERT OR IGNORE INTO device_commands(id,room_id,kind,status,job_id,created_at,updated_at,data) VALUES(?,?,?,'dispatching',?,?,?,'{}')").run(commandId, roomId, 'start', job.id, now(), now());
     if (!inserted.changes) return { reconciled: true, commandId };
     // Intent committed both in the actor and durable database before the external effect.
     try {
       const result = await device.start(roomId, commandId);
-      rt.db.query('UPDATE device_commands SET status=?,updated_at=?,data=? WHERE id=?').run(result.uncertain ? 'uncertain' : result.accepted ? 'accepted' : 'rejected', now(), JSON.stringify(result), commandId);
+      await rt.db.query('UPDATE device_commands SET status=?,updated_at=?,data=? WHERE id=?').run(result.uncertain ? 'uncertain' : result.accepted ? 'accepted' : 'rejected', now(), JSON.stringify(result), commandId);
       if (!result.accepted || result.uncertain) await command(roomId, { type: 'job_result', jobId: job.id, status: result.uncertain ? 'uncertain' : 'failed', reason: result.message || 'Robot command was not confirmed.' });
       // Vendor acceptance is not observed motion. Only telemetry may transition started.
       await telemetry(roomId);
       return result;
     } catch {
-      rt.db.query("UPDATE device_commands SET status='uncertain',updated_at=? WHERE id=?").run(now(), commandId);
+      await rt.db.query("UPDATE device_commands SET status='uncertain',updated_at=? WHERE id=?").run(now(), commandId);
       await command(roomId, { type: 'job_result', jobId: job.id, status: 'uncertain', reason: 'Command delivery is uncertain. Reconcile robot telemetry before another start.' });
       return { uncertain: true };
     }
   }
   async function dock(roomId: string, cause = 'Operator requested docking', commandId = uid('dock')) {
-    rt.db.query("INSERT OR IGNORE INTO device_commands(id,room_id,kind,status,created_at,updated_at,data) VALUES(?,?,?,'dispatching',?,?,?)").run(commandId, roomId, 'dock', now(), now(), JSON.stringify({ cause }));
+    await rt.db.query("INSERT OR IGNORE INTO device_commands(id,room_id,kind,status,created_at,updated_at,data) VALUES(?,?,?,'dispatching',?,?,?)").run(commandId, roomId, 'dock', now(), now(), JSON.stringify({ cause }));
     try {
       const result = await device.dock(roomId, commandId);
-      rt.db.query('UPDATE device_commands SET status=?,updated_at=?,data=? WHERE id=?').run(result.uncertain ? 'uncertain' : result.accepted ? 'accepted' : 'rejected', now(), JSON.stringify(result), commandId);
+      await rt.db.query('UPDATE device_commands SET status=?,updated_at=?,data=? WHERE id=?').run(result.uncertain ? 'uncertain' : result.accepted ? 'accepted' : 'rejected', now(), JSON.stringify(result), commandId);
       const state = await rt.rooms.snapshot(roomId);
       if (state.job && ['started', 'dispatching', 'uncertain'].includes(state.job.status)) await command(roomId, { type: 'job_result', jobId: state.job.id, status: result.uncertain ? 'uncertain' : 'interrupted', reason: cause });
-      audit(rt, 'operations', 'robot.dock', roomId, { commandId, cause, result });
+      await audit(rt, 'operations', 'robot.dock', roomId, { commandId, cause, result });
       return result;
     } catch {
-      rt.db.query("UPDATE device_commands SET status='uncertain',updated_at=? WHERE id=?").run(now(), commandId);
+      await rt.db.query("UPDATE device_commands SET status='uncertain',updated_at=? WHERE id=?").run(now(), commandId);
       return { accepted: false, uncertain: true, message: 'Dock delivery is uncertain. The Q10 cloud connection is required.' };
     }
   }
   async function processEvent(event: DomainEvent) {
     const state = await rt.rooms.snapshot(event.roomId);
-    if (event.type === 'room.inspection_requested') return inspect(event.roomId);
-    if (event.type === 'cleaning.requested') return dispatch(event.roomId, event);
-    if (event.type === 'cleaning.interrupt_required') return dock(event.roomId, String(event.payload.reason || 'Vacancy evidence is unavailable'), `${event.id}:dock`);
+    if (event.type === 'room.inspection_requested') return await inspect(event.roomId);
+    if (event.type === 'cleaning.requested') return await dispatch(event.roomId, event);
+    if (event.type === 'cleaning.interrupt_required') return await dock(event.roomId, String(event.payload.reason || 'Vacancy evidence is unavailable'), `${event.id}:dock`);
     if (event.type === 'room.inspected' && state.inspection && state.inspection.id === event.payload.inspectionId) {
       if (state.inspection.floor === 'dirty' && state.inspection.occupancy === 'vacant' && state.inspection.surfaces === 'clear' && state.inspection.confidence >= 0.9 && (!state.job || !['requested', 'dispatching', 'started', 'uncertain'].includes(state.job.status)) && await roboEnabled(event.roomId)) {
         const result = await rt.rooms.command(event.roomId, { id: `${event.id}:clean`, type: 'request_clean', now: now(), jobId: `clean:${event.id}`, expectedReadyAt: now() + Number(rt.config.cleaningEstimateMs || 10 * 60_000) });
@@ -169,7 +169,7 @@ export function createOperationsService(rt: Runtime): OperationsService {
     return { observed: event.type };
   }
   async function tick() {
-    const rooms = rt.db.query('SELECT id,device_binding_json FROM offices').all() as { id: string; device_binding_json: string | null }[];
+    const rooms = await rt.db.query('SELECT id,device_binding_json FROM offices').all() as { id: string; device_binding_json: string | null }[];
     for (const { id, device_binding_json } of rooms) {
       const binding = device_binding_json ? JSON.parse(device_binding_json) : null;
       const bound = explicitBindings.has(id) || binding && binding.mode === rt.config.deviceMode;
@@ -200,7 +200,7 @@ export function createOperationsService(rt: Runtime): OperationsService {
     const status = await demoStatus(roomId, changes);
     for (const key of ['jevEnabled', 'roboEnabled'] as const) if (previous[key] !== status[key]) {
       const target = key === 'jevEnabled' ? 'Jev' : 'Robo';
-      recordChange(rt, roomId, key, String(status[key]), now(), [{ source: 'Host', target, body: `${key === 'jevEnabled' ? 'Monitoring' : 'Auto clean'} ${status[key] ? 'enabled' : 'disabled'}.` }]);
+      await recordChange(rt, roomId, key, String(status[key]), now(), [{ source: 'Host', target, body: `${key === 'jevEnabled' ? 'Monitoring' : 'Auto clean'} ${status[key] ? 'enabled' : 'disabled'}.` }]);
     }
     if (changes.jevEnabled === false && rt.config.deviceMode === 'physical') await inspect(roomId);
     if (changes.roboEnabled === false) {

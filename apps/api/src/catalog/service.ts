@@ -75,8 +75,8 @@ function matchesAttributes(office: Office, wanted: SearchInput['attributes']): b
 }
 
 export function createCatalogService(rt: Runtime): CatalogService {
-  const rows = () => rt.db.query('SELECT * FROM workspace_groups ORDER BY base_rate_cents,id').all() as Row[];
-  const officeRows = (groupId: string) => rt.db.query('SELECT * FROM offices WHERE group_id=? ORDER BY id').all(groupId) as Row[];
+  const rows = async () => await rt.db.query('SELECT * FROM workspace_groups ORDER BY base_rate_cents,id').all() as Row[];
+  const officeRows = async (groupId: string) => await rt.db.query('SELECT * FROM offices WHERE group_id=? ORDER BY id').all(groupId) as Row[];
 
   async function withAvailability(office: Office, input: SearchInput, startAt: number, endAt: number): Promise<Office> {
     let reason: string | undefined;
@@ -89,19 +89,19 @@ export function createCatalogService(rt: Runtime): CatalogService {
   }
 
   async function group(id: string, input: SearchInput = {}) {
-    const row = rt.db.query('SELECT * FROM workspace_groups WHERE id=?').get(id) as Row | null;
+    const row = await rt.db.query('SELECT * FROM workspace_groups WHERE id=?').get(id) as Row | null;
     if (!row) fail(404, 'Workspace not found.', 'not_found');
     const workspace = mapWorkspace(row);
     const { startAt, endAt } = resolveSearchInterval(input, rt.clock.now());
-    const offices = await Promise.all(officeRows(id).map(row => withAvailability(mapOffice(row, workspace), input, startAt, endAt)));
+    const offices = await Promise.all((await officeRows(id)).map(row => withAvailability(mapOffice(row, workspace), input, startAt, endAt)));
     const matching = offices.filter(office => office.available);
     return { group: { ...workspace, officeCount: offices.length, availableCount: matching.length, lowestRateCents: matching.length ? Math.min(...matching.map(office => office.rateCents)) : null }, offices };
   }
 
   async function office(id: string, input: SearchInput = {}) {
-    const row = rt.db.query('SELECT * FROM offices WHERE id=?').get(id) as Row | null;
+    const row = await rt.db.query('SELECT * FROM offices WHERE id=?').get(id) as Row | null;
     if (!row) fail(404, 'Office not found.', 'not_found');
-    const workspace = rt.db.query('SELECT * FROM workspace_groups WHERE id=?').get(row.group_id) as Row;
+    const workspace = await rt.db.query('SELECT * FROM workspace_groups WHERE id=?').get(row.group_id) as Row;
     const interval = resolveSearchInterval(input, rt.clock.now());
     return withAvailability(mapOffice(row, mapWorkspace(workspace)), input, interval.startAt, interval.endAt);
   }
@@ -112,8 +112,8 @@ export function createCatalogService(rt: Runtime): CatalogService {
       const interval = resolveSearchInterval(input, rt.clock.now());
       if (input.maxRateCents !== undefined && (!Number.isSafeInteger(input.maxRateCents) || input.maxRateCents < 0)) fail(400, 'Enter a valid maximum hourly price.', 'invalid_price');
       const query = (input.location || '').trim().toLocaleLowerCase();
-      const matchingRows = rows().filter(row => !query || `${row.name} ${row.address} San Francisco SF`.toLocaleLowerCase().includes(query));
-      const groups = await Promise.all(matchingRows.map(row => group(row.id, { ...input, ...interval })));
+      const matchingRows = (await rows()).filter(row => !query || `${row.name} ${row.address} San Francisco SF`.toLocaleLowerCase().includes(query));
+      const groups = await Promise.all(matchingRows.map(async row => await group(row.id, { ...input, ...interval })));
       return { groups: groups.map(result => result.group), offices: groups.flatMap(result => result.offices), ...interval, timezone: TIMEZONE, modeled: groups.some(result => result.group.modeled) };
     },
   };

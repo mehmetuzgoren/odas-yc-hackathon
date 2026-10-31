@@ -43,14 +43,14 @@ await second.request(`/conversations/${conversation.id}/messages`, undefined, 40
 const db = new Database(join(resolve(process.env.DATA_DIR ?? '.data'), 'odas.sqlite'), { readonly: true });
 let proof: any;
 for (let attempt = 0; attempt < 20; attempt++) {
-  proof = db.query("SELECT * FROM outbox WHERE id=? AND status='completed'").get(`chat:${message.id}:concierge`);
+  proof = await db.query("SELECT * FROM outbox WHERE id=? AND status='completed'").get(`chat:${message.id}:concierge`);
   if (proof) break;
   await new Promise(resolve => setTimeout(resolve, 500));
 }
 assert(proof?.relay_message_id, 'Completed business action lacks an actual Relay message ID');
-const processed = db.query("SELECT * FROM processed_messages WHERE worker='concierge' AND event_id=? AND status='completed'").get(`chat:${message.id}`);
+const processed = await db.query("SELECT * FROM processed_messages WHERE worker='concierge' AND event_id=? AND status='completed'").get(`chat:${message.id}`);
 assert(processed, 'Durable processed-message result is missing');
-assert.equal((db.query('SELECT COUNT(*) AS count FROM chat_messages WHERE idempotency_key=?').get(`reply:${message.id}`) as any).count, 1, 'Duplicate event created another reply');
+assert.equal((await db.query('SELECT COUNT(*) AS count FROM chat_messages WHERE idempotency_key=?').get(`reply:${message.id}`) as any).count, 1, 'Duplicate event created another reply');
 const response = await fetch(`${apiOrigin}/api/events`, { headers: { Cookie: [...first.cookies].map(([k,v]) => `${k}=${v}`).join('; '), 'Last-Event-ID': '0:0' }, signal: AbortSignal.timeout(10_000) });
 assert.equal(response.status, 200); const reader = response.body!.getReader(); let chunk = '';
 while (!chunk.includes('event: chat')) { const value = await reader.read(); if (value.done) break; chunk += new TextDecoder().decode(value.value); }

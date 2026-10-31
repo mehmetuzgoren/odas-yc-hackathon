@@ -58,7 +58,7 @@ export function createConciergeTools(rt: Runtime) {
       }
       case 'accept_replacement':
       case 'decline_replacement': {
-        const offer = rt.db.query('SELECT * FROM offers WHERE id=?').get(input.offerId) as any;
+        const offer = await rt.db.query('SELECT * FROM offers WHERE id=?').get(input.offerId) as any;
         if (!offer) fail(404, 'Replacement offer not found.');
         await rt.services.commerce.get(context.user, offer.booking_id);
         if (context.confirmedAction !== toolName) return { requiresConfirmation: true, action: toolName, input, message: 'Choose the offer action to confirm your decision.' };
