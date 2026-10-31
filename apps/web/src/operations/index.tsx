@@ -39,18 +39,17 @@ function roomStatus(room: RoomRow): Status {
 
 function useHostRooms() {
   const [rooms, setRooms] = useState<RoomRow[] | null>(null);
-  const [openTasks, setOpenTasks] = useState(0);
   const [error, setError] = useState('');
   const reload = useCallback(async () => {
-    const [inventory, attention] = await Promise.all([api<{ rooms: RoomRow[] }>('/operator/rooms'), api<{ tasks: Task[] }>('/operator/tasks')]);
-    setRooms(inventory.rooms); setOpenTasks(attention.tasks.filter(task => task.status !== 'resolved').length); setError('');
+    const inventory = await api<{ rooms: RoomRow[] }>('/operator/rooms');
+    setRooms(inventory.rooms); setError('');
   }, []);
   useEffect(() => {
     reload().catch(cause => setError(message(cause)));
     const timer = window.setInterval(() => { reload().catch(() => {}); }, 10_000);
     return () => window.clearInterval(timer);
   }, [reload]);
-  return { rooms, openTasks, error, reload };
+  return { rooms, error, reload };
 }
 
 const buildingsOf = (rooms: RoomRow[]) => [...rooms.reduce((map, room) => map.set(room.groupId, [...(map.get(room.groupId) || []), room]), new Map<string, RoomRow[]>()).values()];
@@ -285,16 +284,6 @@ function TaskList({ tasks, onChanged }: { tasks: Task[]; onChanged: () => void }
   </article>)}</div>;
 }
 
-function Attention({ onChanged }: { onChanged: () => void }) {
-  const [tasks, setTasks] = useState<Task[] | null>(null);
-  const [error, setError] = useState('');
-  const load = useCallback(() => { api<{ tasks: Task[] }>('/operator/tasks').then(data => setTasks(data.tasks)).catch(cause => setError(message(cause))); }, []);
-  useEffect(load, [load]);
-  if (error) return <ErrorState message={error} onRetry={load} />;
-  if (!tasks) return <Loading />;
-  return <div className="max-w-4xl space-y-4"><p className="text-sm text-stone-600">Resolving a task records evidence. Room readiness comes from fresh inspections and device observations.</p><TaskList tasks={tasks} onChanged={() => { load(); onChanged(); }} /></div>;
-}
-
 function HostAccessRequired() {
   return <div className="max-w-lg rounded-2xl border border-stone-200 bg-white p-8">
     <h2 className="font-serif text-2xl font-semibold">Host access required</h2>
@@ -305,11 +294,11 @@ function HostAccessRequired() {
 
 function HostTabs() {
   const [params, setParams] = useSearchParams();
-  const { rooms, openTasks, error, reload } = useHostRooms();
-  const tab = (params.get('tab') || 'overview') as 'overview' | 'listings' | 'attention';
+  const { rooms, error, reload } = useHostRooms();
+  const tab = params.get('tab') === 'listings' ? 'listings' : 'overview';
   return <>
-    <Tabs className="mb-8" value={tab} onChange={value => setParams({ tab: value })} items={[{ value: 'overview', label: 'Schedule' }, { value: 'listings', label: 'Listings' }, { value: 'attention', label: openTasks ? `Attention (${openTasks})` : 'Attention' }]} />
-    <div className="mt-2">{tab === 'attention' ? <Attention onChanged={() => void reload()} /> : error && !rooms ? <ErrorState message={error} onRetry={() => void reload()} /> : !rooms ? <Loading /> : tab === 'listings' ? <Listings rooms={rooms} onChanged={() => void reload()} /> : <Schedule rooms={rooms} />}</div>
+    <Tabs className="mb-8" value={tab} onChange={value => setParams({ tab: value })} items={[{ value: 'overview', label: 'Schedule' }, { value: 'listings', label: 'Listings' }]} />
+    <div className="mt-2">{error && !rooms ? <ErrorState message={error} onRetry={() => void reload()} /> : !rooms ? <Loading /> : tab === 'listings' ? <Listings rooms={rooms} onChanged={() => void reload()} /> : <Schedule rooms={rooms} />}</div>
   </>;
 }
 

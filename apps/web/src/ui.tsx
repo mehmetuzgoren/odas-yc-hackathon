@@ -6,6 +6,10 @@ import { zonedNow } from './marketplace/time';
 
 export function Photo({ src, alt = '', className = '' }: { src?: string; alt?: string; className?: string }) {
   const [failedSource, setFailedSource] = useState<string>();
+  if (src?.startsWith('/img/listings/generated/') && failedSource !== src) return <div className={`relative overflow-hidden ${className}`}>
+    <img src={src} alt={alt ? `${alt} (generated view)` : ''} loading="lazy" onLoad={() => setFailedSource(undefined)} onError={() => setFailedSource(src)} className="h-full w-full object-cover" />
+    <span className="absolute right-2 bottom-2 rounded-md bg-ivory/95 px-2 py-1 text-[11px] font-medium text-forest">Generated view</span>
+  </div>;
   if (src && failedSource !== src) return <img src={src} alt={alt} loading="lazy" onLoad={() => setFailedSource(undefined)} onError={() => setFailedSource(src)} className={`object-cover ${className}`} />;
   return <div className={`relative overflow-hidden bg-linen ${className}`}>
     <img src="/images/room-illustration.svg" alt={alt ? `${alt} (illustration; room photo unavailable)` : ''} loading="lazy" className="h-full w-full object-cover" />

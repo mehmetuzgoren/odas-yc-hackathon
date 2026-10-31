@@ -1,0 +1,415 @@
+{
+  "referenceSite": "https://odas-marketplace.emergent.host",
+  "generationTool": "Built-in image_gen",
+  "originalAssets": [
+    {
+      "path": "/img/listings/507-polk-watch-party.jpg",
+      "sourceUrl": "https://odas-marketplace.emergent.host/img/listings/507-polk-watch-party.jpg",
+      "groupId": "polk-310",
+      "referenceListing": "https://odas-marketplace.emergent.host/rooms/lst_507-polk-310-1"
+    },
+    {
+      "path": "/img/listings/507-polk-shared-coffee-tea-concept.jpg",
+      "sourceUrl": "https://odas-marketplace.emergent.host/img/listings/507-polk-shared-coffee-tea-concept.jpg",
+      "groupId": "polk-310",
+      "referenceListing": "https://odas-marketplace.emergent.host/rooms/lst_507-polk-310-1"
+    },
+    {
+      "path": "/img/listings/1360-mission-watch-party.jpg",
+      "sourceUrl": "https://odas-marketplace.emergent.host/img/listings/1360-mission-watch-party.jpg",
+      "groupId": "mission-400",
+      "referenceListing": "https://odas-marketplace.emergent.host/rooms/lst_1360-mission-400-1"
+    },
+    {
+      "path": "/img/listings/1360-mission-shared-coffee-tea-concept.jpg",
+      "sourceUrl": "https://odas-marketplace.emergent.host/img/listings/1360-mission-shared-coffee-tea-concept.jpg",
+      "groupId": "mission-400",
+      "referenceListing": "https://odas-marketplace.emergent.host/rooms/lst_1360-mission-400-1"
+    },
+    {
+      "path": "/img/listings/1540-market-conference.jpg",
+      "sourceUrl": "https://odas-marketplace.emergent.host/img/listings/1540-market-conference.jpg",
+      "groupId": "market-1540-f3",
+      "referenceListing": "https://odas-marketplace.emergent.host/rooms/lst_1540-market-third-3500-1"
+    },
+    {
+      "path": "/img/listings/1540-market-shared-coffee-tea-concept.jpg",
+      "sourceUrl": "https://odas-marketplace.emergent.host/img/listings/1540-market-shared-coffee-tea-concept.jpg",
+      "groupId": "market-1540-f3",
+      "referenceListing": "https://odas-marketplace.emergent.host/rooms/lst_1540-market-third-3500-1"
+    },
+    {
+      "path": "/img/listings/44-gough-conference.jpg",
+      "sourceUrl": "https://odas-marketplace.emergent.host/img/listings/44-gough-conference.jpg",
+      "groupId": "gough-207",
+      "referenceListing": "https://odas-marketplace.emergent.host/rooms/lst_44-gough-207-1"
+    },
+    {
+      "path": "/img/listings/44-gough-shared-coffee-tea-concept.jpg",
+      "sourceUrl": "https://odas-marketplace.emergent.host/img/listings/44-gough-shared-coffee-tea-concept.jpg",
+      "groupId": "gough-207",
+      "referenceListing": "https://odas-marketplace.emergent.host/rooms/lst_44-gough-207-1"
+    },
+    {
+      "path": "/img/listings/2211-post-single-desk.jpg",
+      "sourceUrl": "https://odas-marketplace.emergent.host/img/listings/2211-post-single-desk.jpg",
+      "groupId": "post-204",
+      "referenceListing": "https://odas-marketplace.emergent.host/rooms/lst_2211-post-204-1"
+    },
+    {
+      "path": "/img/listings/2211-post-shared-coffee-tea-concept.jpg",
+      "sourceUrl": "https://odas-marketplace.emergent.host/img/listings/2211-post-shared-coffee-tea-concept.jpg",
+      "groupId": "post-204",
+      "referenceListing": "https://odas-marketplace.emergent.host/rooms/lst_2211-post-204-1"
+    },
+    {
+      "path": "/img/listings/870-market-conference.jpg",
+      "sourceUrl": "https://odas-marketplace.emergent.host/img/listings/870-market-conference.jpg",
+      "groupId": "market-870-1242",
+      "referenceListing": "https://odas-marketplace.emergent.host/rooms/lst_870-market-1242-1"
+    },
+    {
+      "path": "/img/listings/870-market-shared-coffee-tea-concept.jpg",
+      "sourceUrl": "https://odas-marketplace.emergent.host/img/listings/870-market-shared-coffee-tea-concept.jpg",
+      "groupId": "market-870-1242",
+      "referenceListing": "https://odas-marketplace.emergent.host/rooms/lst_870-market-1242-1"
+    }
+  ],
+  "rooms": [
+    {
+      "id": "polk-310-office-01",
+      "name": "Lion",
+      "groupId": "polk-310",
+      "photos": [
+        "/img/listings/507-polk-watch-party.jpg",
+        "/img/listings/507-polk-shared-coffee-tea-concept.jpg"
+      ],
+      "kind": "reference-listing"
+    },
+    {
+      "id": "polk-310-office-02",
+      "name": "Butterfly",
+      "groupId": "polk-310",
+      "photos": [
+        "/img/listings/generated/polk-310-butterfly.png"
+      ],
+      "kind": "generated-alternate",
+      "referenceImage": "/img/listings/507-polk-watch-party.jpg",
+      "prompt": "Use case: photorealistic-natural\nAsset type: office marketplace room photograph, landscape composition.\nPrimary request: Create one distinct alternate office room image for the room named Butterfly. Use the supplied reference photo only as a reference for the building's materials, daylight, windows and furnishing style; create a different private workspace rather than duplicating the reference or adding any text.\nInput image 1 role: architectural and photographic style reference.\nScene: Warm beige walls, broad white-framed windows, acoustic tile ceiling, wood flooring, walnut and oak furniture, soft neutral upholstery.\nComposition: View from the doorway with the desk facing the window and a chair slightly angled. Eye-level architectural interior photography, natural proportions, straight verticals, realistic materials and soft daylight. The room is empty and ready to use.\nConstraints: One finished photographic image, no collage, no borders, no people, no animals, no room-name lettering, no logos or watermarks. Avoid exaggerated luxury, impossible geometry, illustration or CGI styling. This is a generated alternate visual, not documentary evidence of an existing room."
+    },
+    {
+      "id": "polk-310-office-03",
+      "name": "Fox",
+      "groupId": "polk-310",
+      "photos": [
+        "/img/listings/generated/polk-310-fox.png"
+      ],
+      "kind": "generated-alternate",
+      "referenceImage": "/img/listings/507-polk-watch-party.jpg",
+      "prompt": "Use case: photorealistic-natural\nAsset type: office marketplace room photograph, landscape composition.\nPrimary request: Create one distinct alternate office room image for the room named Fox. Use the supplied reference photo only as a reference for the building's materials, daylight, windows and furnishing style; create a different private workspace rather than duplicating the reference or adding any text.\nInput image 1 role: architectural and photographic style reference.\nScene: Warm beige walls, broad white-framed windows, acoustic tile ceiling, wood flooring, walnut and oak furniture, soft neutral upholstery.\nComposition: View from the opposite corner, with the desk along the side wall and daylight from the left. Eye-level architectural interior photography, natural proportions, straight verticals, realistic materials and soft daylight. The room is empty and ready to use.\nConstraints: One finished photographic image, no collage, no borders, no people, no animals, no room-name lettering, no logos or watermarks. Avoid exaggerated luxury, impossible geometry, illustration or CGI styling. This is a generated alternate visual, not documentary evidence of an existing room."
+    },
+    {
+      "id": "polk-310-office-04",
+      "name": "Otter",
+      "groupId": "polk-310",
+      "photos": [
+        "/img/listings/generated/polk-310-otter.png"
+      ],
+      "kind": "generated-alternate",
+      "referenceImage": "/img/listings/507-polk-watch-party.jpg",
+      "prompt": "Use case: photorealistic-natural\nAsset type: office marketplace room photograph, landscape composition.\nPrimary request: Create one distinct alternate office room image for the room named Otter. Use the supplied reference photo only as a reference for the building's materials, daylight, windows and furnishing style; create a different private workspace rather than duplicating the reference or adding any text.\nInput image 1 role: architectural and photographic style reference.\nScene: Warm beige walls, broad white-framed windows, acoustic tile ceiling, wood flooring, walnut and oak furniture, soft neutral upholstery.\nComposition: A wider diagonal view, with a central worktable, clear circulation space and tidy seating. Eye-level architectural interior photography, natural proportions, straight verticals, realistic materials and soft daylight. The room is empty and ready to use.\nConstraints: One finished photographic image, no collage, no borders, no people, no animals, no room-name lettering, no logos or watermarks. Avoid exaggerated luxury, impossible geometry, illustration or CGI styling. This is a generated alternate visual, not documentary evidence of an existing room."
+    },
+    {
+      "id": "polk-310-office-05",
+      "name": "Owl",
+      "groupId": "polk-310",
+      "photos": [
+        "/img/listings/generated/polk-310-owl.png"
+      ],
+      "kind": "generated-alternate",
+      "referenceImage": "/img/listings/507-polk-watch-party.jpg",
+      "prompt": "Use case: photorealistic-natural\nAsset type: office marketplace room photograph, landscape composition.\nPrimary request: Create one distinct alternate office room image for the room named Owl. Use the supplied reference photo only as a reference for the building's materials, daylight, windows and furnishing style; create a different private workspace rather than duplicating the reference or adding any text.\nInput image 1 role: architectural and photographic style reference.\nScene: Warm beige walls, broad white-framed windows, acoustic tile ceiling, wood flooring, walnut and oak furniture, soft neutral upholstery.\nComposition: View toward the window, with a compact desk beside a low storage cabinet. Eye-level architectural interior photography, natural proportions, straight verticals, realistic materials and soft daylight. The room is empty and ready to use.\nConstraints: One finished photographic image, no collage, no borders, no people, no animals, no room-name lettering, no logos or watermarks. Avoid exaggerated luxury, impossible geometry, illustration or CGI styling. This is a generated alternate visual, not documentary evidence of an existing room."
+    },
+    {
+      "id": "polk-310-office-06",
+      "name": "Dolphin",
+      "groupId": "polk-310",
+      "photos": [
+        "/img/listings/generated/polk-310-dolphin.png"
+      ],
+      "kind": "generated-alternate",
+      "referenceImage": "/img/listings/507-polk-watch-party.jpg",
+      "prompt": "Use case: photorealistic-natural\nAsset type: office marketplace room photograph, landscape composition.\nPrimary request: Create one distinct alternate office room image for the room named Dolphin. Use the supplied reference photo only as a reference for the building's materials, daylight, windows and furnishing style; create a different private workspace rather than duplicating the reference or adding any text.\nInput image 1 role: architectural and photographic style reference.\nScene: Warm beige walls, broad white-framed windows, acoustic tile ceiling, wood flooring, walnut and oak furniture, soft neutral upholstery.\nComposition: View across the room from the window side, with a small worktable and two visitor chairs. Eye-level architectural interior photography, natural proportions, straight verticals, realistic materials and soft daylight. The room is empty and ready to use.\nConstraints: One finished photographic image, no collage, no borders, no people, no animals, no room-name lettering, no logos or watermarks. Avoid exaggerated luxury, impossible geometry, illustration or CGI styling. This is a generated alternate visual, not documentary evidence of an existing room."
+    },
+    {
+      "id": "polk-310-office-07",
+      "name": "Panda",
+      "groupId": "polk-310",
+      "photos": [
+        "/img/listings/generated/polk-310-panda.png"
+      ],
+      "kind": "generated-alternate",
+      "referenceImage": "/img/listings/507-polk-watch-party.jpg",
+      "prompt": "Use case: photorealistic-natural\nAsset type: office marketplace room photograph, landscape composition.\nPrimary request: Create one distinct alternate office room image for the room named Panda. Use the supplied reference photo only as a reference for the building's materials, daylight, windows and furnishing style; create a different private workspace rather than duplicating the reference or adding any text.\nInput image 1 role: architectural and photographic style reference.\nScene: Warm beige walls, broad white-framed windows, acoustic tile ceiling, wood flooring, walnut and oak furniture, soft neutral upholstery.\nComposition: An intimate corner view with one desk, an ergonomic chair and a simple plant. Eye-level architectural interior photography, natural proportions, straight verticals, realistic materials and soft daylight. The room is empty and ready to use.\nConstraints: One finished photographic image, no collage, no borders, no people, no animals, no room-name lettering, no logos or watermarks. Avoid exaggerated luxury, impossible geometry, illustration or CGI styling. This is a generated alternate visual, not documentary evidence of an existing room."
+    },
+    {
+      "id": "polk-310-office-08",
+      "name": "Falcon",
+      "groupId": "polk-310",
+      "photos": [
+        "/img/listings/generated/polk-310-falcon.png"
+      ],
+      "kind": "generated-alternate",
+      "referenceImage": "/img/listings/507-polk-watch-party.jpg",
+      "prompt": "Use case: photorealistic-natural\nAsset type: office marketplace room photograph, landscape composition.\nPrimary request: Create one distinct alternate office room image for the room named Falcon. Use the supplied reference photo only as a reference for the building's materials, daylight, windows and furnishing style; create a different private workspace rather than duplicating the reference or adding any text.\nInput image 1 role: architectural and photographic style reference.\nScene: Warm beige walls, broad white-framed windows, acoustic tile ceiling, wood flooring, walnut and oak furniture, soft neutral upholstery.\nComposition: View through an open doorway into a small workspace with a desk on the right. Eye-level architectural interior photography, natural proportions, straight verticals, realistic materials and soft daylight. The room is empty and ready to use.\nConstraints: One finished photographic image, no collage, no borders, no people, no animals, no room-name lettering, no logos or watermarks. Avoid exaggerated luxury, impossible geometry, illustration or CGI styling. This is a generated alternate visual, not documentary evidence of an existing room."
+    },
+    {
+      "id": "polk-310-office-09",
+      "name": "Deer",
+      "groupId": "polk-310",
+      "photos": [
+        "/img/listings/generated/polk-310-deer.png"
+      ],
+      "kind": "generated-alternate",
+      "referenceImage": "/img/listings/507-polk-watch-party.jpg",
+      "prompt": "Use case: photorealistic-natural\nAsset type: office marketplace room photograph, landscape composition.\nPrimary request: Create one distinct alternate office room image for the room named Deer. Use the supplied reference photo only as a reference for the building's materials, daylight, windows and furnishing style; create a different private workspace rather than duplicating the reference or adding any text.\nInput image 1 role: architectural and photographic style reference.\nScene: Warm beige walls, broad white-framed windows, acoustic tile ceiling, wood flooring, walnut and oak furniture, soft neutral upholstery.\nComposition: A balanced frontal view with a worktable offset from the window and a quiet seating corner. Eye-level architectural interior photography, natural proportions, straight verticals, realistic materials and soft daylight. The room is empty and ready to use.\nConstraints: One finished photographic image, no collage, no borders, no people, no animals, no room-name lettering, no logos or watermarks. Avoid exaggerated luxury, impossible geometry, illustration or CGI styling. This is a generated alternate visual, not documentary evidence of an existing room."
+    },
+    {
+      "id": "mission-400-office-01",
+      "name": "Tiger",
+      "groupId": "mission-400",
+      "photos": [
+        "/img/listings/1360-mission-watch-party.jpg",
+        "/img/listings/1360-mission-shared-coffee-tea-concept.jpg"
+      ],
+      "kind": "reference-listing"
+    },
+    {
+      "id": "mission-400-office-02",
+      "name": "Wolf",
+      "groupId": "mission-400",
+      "photos": [
+        "/img/listings/generated/mission-400-wolf.png"
+      ],
+      "kind": "generated-alternate",
+      "referenceImage": "/img/listings/1360-mission-watch-party.jpg",
+      "prompt": "Use case: photorealistic-natural\nAsset type: office marketplace room photograph, landscape composition.\nPrimary request: Create one distinct alternate office room image for the room named Wolf. Use the supplied reference photo only as a reference for the building's materials, daylight, windows and furnishing style; create a different private workspace rather than duplicating the reference or adding any text.\nInput image 1 role: architectural and photographic style reference.\nScene: Airy San Francisco loft office, tall multi-pane windows, white walls, exposed white ceiling and suspended lights, warm wood flooring, understated contemporary furniture.\nComposition: View from the doorway with the desk facing the window and a chair slightly angled. Eye-level architectural interior photography, natural proportions, straight verticals, realistic materials and soft daylight. The room is empty and ready to use.\nConstraints: One finished photographic image, no collage, no borders, no people, no animals, no room-name lettering, no logos or watermarks. Avoid exaggerated luxury, impossible geometry, illustration or CGI styling. This is a generated alternate visual, not documentary evidence of an existing room."
+    },
+    {
+      "id": "mission-400-office-03",
+      "name": "Koala",
+      "groupId": "mission-400",
+      "photos": [
+        "/img/listings/generated/mission-400-koala.png"
+      ],
+      "kind": "generated-alternate",
+      "referenceImage": "/img/listings/1360-mission-watch-party.jpg",
+      "prompt": "Use case: photorealistic-natural\nAsset type: office marketplace room photograph, landscape composition.\nPrimary request: Create one distinct alternate office room image for the room named Koala. Use the supplied reference photo only as a reference for the building's materials, daylight, windows and furnishing style; create a different private workspace rather than duplicating the reference or adding any text.\nInput image 1 role: architectural and photographic style reference.\nScene: Airy San Francisco loft office, tall multi-pane windows, white walls, exposed white ceiling and suspended lights, warm wood flooring, understated contemporary furniture.\nComposition: View from the opposite corner, with the desk along the side wall and daylight from the left. Eye-level architectural interior photography, natural proportions, straight verticals, realistic materials and soft daylight. The room is empty and ready to use.\nConstraints: One finished photographic image, no collage, no borders, no people, no animals, no room-name lettering, no logos or watermarks. Avoid exaggerated luxury, impossible geometry, illustration or CGI styling. This is a generated alternate visual, not documentary evidence of an existing room."
+    },
+    {
+      "id": "mission-400-office-04",
+      "name": "Zebra",
+      "groupId": "mission-400",
+      "photos": [
+        "/img/listings/generated/mission-400-zebra.png"
+      ],
+      "kind": "generated-alternate",
+      "referenceImage": "/img/listings/1360-mission-watch-party.jpg",
+      "prompt": "Use case: photorealistic-natural\nAsset type: office marketplace room photograph, landscape composition.\nPrimary request: Create one distinct alternate office room image for the room named Zebra. Use the supplied reference photo only as a reference for the building's materials, daylight, windows and furnishing style; create a different private workspace rather than duplicating the reference or adding any text.\nInput image 1 role: architectural and photographic style reference.\nScene: Airy San Francisco loft office, tall multi-pane windows, white walls, exposed white ceiling and suspended lights, warm wood flooring, understated contemporary furniture.\nComposition: A wider diagonal view, with a central worktable, clear circulation space and tidy seating. Eye-level architectural interior photography, natural proportions, straight verticals, realistic materials and soft daylight. The room is empty and ready to use.\nConstraints: One finished photographic image, no collage, no borders, no people, no animals, no room-name lettering, no logos or watermarks. Avoid exaggerated luxury, impossible geometry, illustration or CGI styling. This is a generated alternate visual, not documentary evidence of an existing room."
+    },
+    {
+      "id": "mission-400-office-05",
+      "name": "Lynx",
+      "groupId": "mission-400",
+      "photos": [
+        "/img/listings/generated/mission-400-lynx.png"
+      ],
+      "kind": "generated-alternate",
+      "referenceImage": "/img/listings/1360-mission-watch-party.jpg",
+      "prompt": "Use case: photorealistic-natural\nAsset type: office marketplace room photograph, landscape composition.\nPrimary request: Create one distinct alternate office room image for the room named Lynx. Use the supplied reference photo only as a reference for the building's materials, daylight, windows and furnishing style; create a different private workspace rather than duplicating the reference or adding any text.\nInput image 1 role: architectural and photographic style reference.\nScene: Airy San Francisco loft office, tall multi-pane windows, white walls, exposed white ceiling and suspended lights, warm wood flooring, understated contemporary furniture.\nComposition: View toward the window, with a compact desk beside a low storage cabinet. Eye-level architectural interior photography, natural proportions, straight verticals, realistic materials and soft daylight. The room is empty and ready to use.\nConstraints: One finished photographic image, no collage, no borders, no people, no animals, no room-name lettering, no logos or watermarks. Avoid exaggerated luxury, impossible geometry, illustration or CGI styling. This is a generated alternate visual, not documentary evidence of an existing room."
+    },
+    {
+      "id": "mission-400-office-06",
+      "name": "Robin",
+      "groupId": "mission-400",
+      "photos": [
+        "/img/listings/generated/mission-400-robin.png"
+      ],
+      "kind": "generated-alternate",
+      "referenceImage": "/img/listings/1360-mission-watch-party.jpg",
+      "prompt": "Use case: photorealistic-natural\nAsset type: office marketplace room photograph, landscape composition.\nPrimary request: Create one distinct alternate office room image for the room named Robin. Use the supplied reference photo only as a reference for the building's materials, daylight, windows and furnishing style; create a different private workspace rather than duplicating the reference or adding any text.\nInput image 1 role: architectural and photographic style reference.\nScene: Airy San Francisco loft office, tall multi-pane windows, white walls, exposed white ceiling and suspended lights, warm wood flooring, understated contemporary furniture.\nComposition: View across the room from the window side, with a small worktable and two visitor chairs. Eye-level architectural interior photography, natural proportions, straight verticals, realistic materials and soft daylight. The room is empty and ready to use.\nConstraints: One finished photographic image, no collage, no borders, no people, no animals, no room-name lettering, no logos or watermarks. Avoid exaggerated luxury, impossible geometry, illustration or CGI styling. This is a generated alternate visual, not documentary evidence of an existing room."
+    },
+    {
+      "id": "mission-400-office-07",
+      "name": "Moose",
+      "groupId": "mission-400",
+      "photos": [
+        "/img/listings/generated/mission-400-moose.png"
+      ],
+      "kind": "generated-alternate",
+      "referenceImage": "/img/listings/1360-mission-watch-party.jpg",
+      "prompt": "Use case: photorealistic-natural\nAsset type: office marketplace room photograph, landscape composition.\nPrimary request: Create one distinct alternate office room image for the room named Moose. Use the supplied reference photo only as a reference for the building's materials, daylight, windows and furnishing style; create a different private workspace rather than duplicating the reference or adding any text.\nInput image 1 role: architectural and photographic style reference.\nScene: Airy San Francisco loft office, tall multi-pane windows, white walls, exposed white ceiling and suspended lights, warm wood flooring, understated contemporary furniture.\nComposition: An intimate corner view with one desk, an ergonomic chair and a simple plant. Eye-level architectural interior photography, natural proportions, straight verticals, realistic materials and soft daylight. The room is empty and ready to use.\nConstraints: One finished photographic image, no collage, no borders, no people, no animals, no room-name lettering, no logos or watermarks. Avoid exaggerated luxury, impossible geometry, illustration or CGI styling. This is a generated alternate visual, not documentary evidence of an existing room."
+    },
+    {
+      "id": "mission-400-office-08",
+      "name": "Penguin",
+      "groupId": "mission-400",
+      "photos": [
+        "/img/listings/generated/mission-400-penguin.png"
+      ],
+      "kind": "generated-alternate",
+      "referenceImage": "/img/listings/1360-mission-watch-party.jpg",
+      "prompt": "Use case: photorealistic-natural\nAsset type: office marketplace room photograph, landscape composition.\nPrimary request: Create one distinct alternate office room image for the room named Penguin. Use the supplied reference photo only as a reference for the building's materials, daylight, windows and furnishing style; create a different private workspace rather than duplicating the reference or adding any text.\nInput image 1 role: architectural and photographic style reference.\nScene: Airy San Francisco loft office, tall multi-pane windows, white walls, exposed white ceiling and suspended lights, warm wood flooring, understated contemporary furniture.\nComposition: View through an open doorway into a small workspace with a desk on the right. Eye-level architectural interior photography, natural proportions, straight verticals, realistic materials and soft daylight. The room is empty and ready to use.\nConstraints: One finished photographic image, no collage, no borders, no people, no animals, no room-name lettering, no logos or watermarks. Avoid exaggerated luxury, impossible geometry, illustration or CGI styling. This is a generated alternate visual, not documentary evidence of an existing room."
+    },
+    {
+      "id": "market-1540-f3-office-01",
+      "name": "Eagle",
+      "groupId": "market-1540-f3",
+      "photos": [
+        "/img/listings/1540-market-conference.jpg",
+        "/img/listings/1540-market-shared-coffee-tea-concept.jpg"
+      ],
+      "kind": "reference-listing"
+    },
+    {
+      "id": "market-1540-f3-office-02",
+      "name": "Bear",
+      "groupId": "market-1540-f3",
+      "photos": [
+        "/img/listings/generated/market-1540-f3-bear.png"
+      ],
+      "kind": "generated-alternate",
+      "referenceImage": "/img/listings/1540-market-conference.jpg",
+      "prompt": "Use case: photorealistic-natural\nAsset type: office marketplace room photograph, landscape composition.\nPrimary request: Create one distinct alternate office room image for the room named Bear. Use the supplied reference photo only as a reference for the building's materials, daylight, windows and furnishing style; create a different private workspace rather than duplicating the reference or adding any text.\nInput image 1 role: architectural and photographic style reference.\nScene: Bright enclosed office with white walls, wide industrial sash windows, gray low-pile carpet, light oak worktables and black mesh office chairs.\nComposition: View from the doorway with the desk facing the window and a chair slightly angled. Eye-level architectural interior photography, natural proportions, straight verticals, realistic materials and soft daylight. The room is empty and ready to use.\nConstraints: One finished photographic image, no collage, no borders, no people, no animals, no room-name lettering, no logos or watermarks. Avoid exaggerated luxury, impossible geometry, illustration or CGI styling. This is a generated alternate visual, not documentary evidence of an existing room."
+    },
+    {
+      "id": "market-1540-f3-office-03",
+      "name": "Rabbit",
+      "groupId": "market-1540-f3",
+      "photos": [
+        "/img/listings/generated/market-1540-f3-rabbit.png"
+      ],
+      "kind": "generated-alternate",
+      "referenceImage": "/img/listings/1540-market-conference.jpg",
+      "prompt": "Use case: photorealistic-natural\nAsset type: office marketplace room photograph, landscape composition.\nPrimary request: Create one distinct alternate office room image for the room named Rabbit. Use the supplied reference photo only as a reference for the building's materials, daylight, windows and furnishing style; create a different private workspace rather than duplicating the reference or adding any text.\nInput image 1 role: architectural and photographic style reference.\nScene: Bright enclosed office with white walls, wide industrial sash windows, gray low-pile carpet, light oak worktables and black mesh office chairs.\nComposition: View from the opposite corner, with the desk along the side wall and daylight from the left. Eye-level architectural interior photography, natural proportions, straight verticals, realistic materials and soft daylight. The room is empty and ready to use.\nConstraints: One finished photographic image, no collage, no borders, no people, no animals, no room-name lettering, no logos or watermarks. Avoid exaggerated luxury, impossible geometry, illustration or CGI styling. This is a generated alternate visual, not documentary evidence of an existing room."
+    },
+    {
+      "id": "market-1540-f3-office-04",
+      "name": "Gecko",
+      "groupId": "market-1540-f3",
+      "photos": [
+        "/img/listings/generated/market-1540-f3-gecko.png"
+      ],
+      "kind": "generated-alternate",
+      "referenceImage": "/img/listings/1540-market-conference.jpg",
+      "prompt": "Use case: photorealistic-natural\nAsset type: office marketplace room photograph, landscape composition.\nPrimary request: Create one distinct alternate office room image for the room named Gecko. Use the supplied reference photo only as a reference for the building's materials, daylight, windows and furnishing style; create a different private workspace rather than duplicating the reference or adding any text.\nInput image 1 role: architectural and photographic style reference.\nScene: Bright enclosed office with white walls, wide industrial sash windows, gray low-pile carpet, light oak worktables and black mesh office chairs.\nComposition: A wider diagonal view, with a central worktable, clear circulation space and tidy seating. Eye-level architectural interior photography, natural proportions, straight verticals, realistic materials and soft daylight. The room is empty and ready to use.\nConstraints: One finished photographic image, no collage, no borders, no people, no animals, no room-name lettering, no logos or watermarks. Avoid exaggerated luxury, impossible geometry, illustration or CGI styling. This is a generated alternate visual, not documentary evidence of an existing room."
+    },
+    {
+      "id": "market-1540-f3-office-05",
+      "name": "Heron",
+      "groupId": "market-1540-f3",
+      "photos": [
+        "/img/listings/generated/market-1540-f3-heron.png"
+      ],
+      "kind": "generated-alternate",
+      "referenceImage": "/img/listings/1540-market-conference.jpg",
+      "prompt": "Use case: photorealistic-natural\nAsset type: office marketplace room photograph, landscape composition.\nPrimary request: Create one distinct alternate office room image for the room named Heron. Use the supplied reference photo only as a reference for the building's materials, daylight, windows and furnishing style; create a different private workspace rather than duplicating the reference or adding any text.\nInput image 1 role: architectural and photographic style reference.\nScene: Bright enclosed office with white walls, wide industrial sash windows, gray low-pile carpet, light oak worktables and black mesh office chairs.\nComposition: View toward the window, with a compact desk beside a low storage cabinet. Eye-level architectural interior photography, natural proportions, straight verticals, realistic materials and soft daylight. The room is empty and ready to use.\nConstraints: One finished photographic image, no collage, no borders, no people, no animals, no room-name lettering, no logos or watermarks. Avoid exaggerated luxury, impossible geometry, illustration or CGI styling. This is a generated alternate visual, not documentary evidence of an existing room."
+    },
+    {
+      "id": "market-1540-f3-office-06",
+      "name": "Seal",
+      "groupId": "market-1540-f3",
+      "photos": [
+        "/img/listings/generated/market-1540-f3-seal.png"
+      ],
+      "kind": "generated-alternate",
+      "referenceImage": "/img/listings/1540-market-conference.jpg",
+      "prompt": "Use case: photorealistic-natural\nAsset type: office marketplace room photograph, landscape composition.\nPrimary request: Create one distinct alternate office room image for the room named Seal. Use the supplied reference photo only as a reference for the building's materials, daylight, windows and furnishing style; create a different private workspace rather than duplicating the reference or adding any text.\nInput image 1 role: architectural and photographic style reference.\nScene: Bright enclosed office with white walls, wide industrial sash windows, gray low-pile carpet, light oak worktables and black mesh office chairs.\nComposition: View across the room from the window side, with a small worktable and two visitor chairs. Eye-level architectural interior photography, natural proportions, straight verticals, realistic materials and soft daylight. The room is empty and ready to use.\nConstraints: One finished photographic image, no collage, no borders, no people, no animals, no room-name lettering, no logos or watermarks. Avoid exaggerated luxury, impossible geometry, illustration or CGI styling. This is a generated alternate visual, not documentary evidence of an existing room."
+    },
+    {
+      "id": "market-1540-f3-office-07",
+      "name": "Cheetah",
+      "groupId": "market-1540-f3",
+      "photos": [
+        "/img/listings/generated/market-1540-f3-cheetah.png"
+      ],
+      "kind": "generated-alternate",
+      "referenceImage": "/img/listings/1540-market-conference.jpg",
+      "prompt": "Use case: photorealistic-natural\nAsset type: office marketplace room photograph, landscape composition.\nPrimary request: Create one distinct alternate office room image for the room named Cheetah. Use the supplied reference photo only as a reference for the building's materials, daylight, windows and furnishing style; create a different private workspace rather than duplicating the reference or adding any text.\nInput image 1 role: architectural and photographic style reference.\nScene: Bright enclosed office with white walls, wide industrial sash windows, gray low-pile carpet, light oak worktables and black mesh office chairs.\nComposition: An intimate corner view with one desk, an ergonomic chair and a simple plant. Eye-level architectural interior photography, natural proportions, straight verticals, realistic materials and soft daylight. The room is empty and ready to use.\nConstraints: One finished photographic image, no collage, no borders, no people, no animals, no room-name lettering, no logos or watermarks. Avoid exaggerated luxury, impossible geometry, illustration or CGI styling. This is a generated alternate visual, not documentary evidence of an existing room."
+    },
+    {
+      "id": "gough-207-office-01",
+      "name": "Whale",
+      "groupId": "gough-207",
+      "photos": [
+        "/img/listings/44-gough-conference.jpg",
+        "/img/listings/44-gough-shared-coffee-tea-concept.jpg"
+      ],
+      "kind": "reference-listing"
+    },
+    {
+      "id": "post-204-office-01",
+      "name": "Swan",
+      "groupId": "post-204",
+      "photos": [
+        "/img/listings/2211-post-single-desk.jpg",
+        "/img/listings/2211-post-shared-coffee-tea-concept.jpg"
+      ],
+      "kind": "reference-listing"
+    },
+    {
+      "id": "post-204-office-02",
+      "name": "Turtle",
+      "groupId": "post-204",
+      "photos": [
+        "/img/listings/generated/post-204-turtle.png"
+      ],
+      "kind": "generated-alternate",
+      "referenceImage": "/img/listings/2211-post-single-desk.jpg",
+      "prompt": "Use case: photorealistic-natural\nAsset type: office marketplace room photograph, landscape composition.\nPrimary request: Create one distinct alternate office room image for the room named Turtle. Use the supplied reference photo only as a reference for the building's materials, daylight, windows and furnishing style; create a different private workspace rather than duplicating the reference or adding any text.\nInput image 1 role: architectural and photographic style reference.\nScene: Compact quiet private office, warm off-white walls, a window with white blinds, gray carpet, a solid wood desk, black ergonomic chair and warm task light.\nComposition: View from the doorway with the desk facing the window and a chair slightly angled. Eye-level architectural interior photography, natural proportions, straight verticals, realistic materials and soft daylight. The room is empty and ready to use.\nConstraints: One finished photographic image, no collage, no borders, no people, no animals, no room-name lettering, no logos or watermarks. Avoid exaggerated luxury, impossible geometry, illustration or CGI styling. This is a generated alternate visual, not documentary evidence of an existing room."
+    },
+    {
+      "id": "post-204-office-03",
+      "name": "Peacock",
+      "groupId": "post-204",
+      "photos": [
+        "/img/listings/generated/post-204-peacock.png"
+      ],
+      "kind": "generated-alternate",
+      "referenceImage": "/img/listings/2211-post-single-desk.jpg",
+      "prompt": "Use case: photorealistic-natural\nAsset type: office marketplace room photograph, landscape composition.\nPrimary request: Create one distinct alternate office room image for the room named Peacock. Use the supplied reference photo only as a reference for the building's materials, daylight, windows and furnishing style; create a different private workspace rather than duplicating the reference or adding any text.\nInput image 1 role: architectural and photographic style reference.\nScene: Compact quiet private office, warm off-white walls, a window with white blinds, gray carpet, a solid wood desk, black ergonomic chair and warm task light.\nComposition: View from the opposite corner, with the desk along the side wall and daylight from the left. Eye-level architectural interior photography, natural proportions, straight verticals, realistic materials and soft daylight. The room is empty and ready to use.\nConstraints: One finished photographic image, no collage, no borders, no people, no animals, no room-name lettering, no logos or watermarks. Avoid exaggerated luxury, impossible geometry, illustration or CGI styling. This is a generated alternate visual, not documentary evidence of an existing room."
+    },
+    {
+      "id": "market-870-1242-office-01",
+      "name": "Badger",
+      "groupId": "market-870-1242",
+      "photos": [
+        "/img/listings/870-market-conference.jpg",
+        "/img/listings/870-market-shared-coffee-tea-concept.jpg"
+      ],
+      "kind": "reference-listing"
+    },
+    {
+      "id": "market-870-1242-office-02",
+      "name": "Sparrow",
+      "groupId": "market-870-1242",
+      "photos": [
+        "/img/listings/generated/market-870-1242-sparrow.png"
+      ],
+      "kind": "generated-alternate",
+      "referenceImage": "/img/listings/870-market-conference.jpg",
+      "prompt": "Use case: photorealistic-natural\nAsset type: office marketplace room photograph, landscape composition.\nPrimary request: Create one distinct alternate office room image for the room named Sparrow. Use the supplied reference photo only as a reference for the building's materials, daylight, windows and furnishing style; create a different private workspace rather than duplicating the reference or adding any text.\nInput image 1 role: architectural and photographic style reference.\nScene: Compact professional meeting office, off-white walls, gray carpet, a tall city-facing sash window, light oak table, soft gray upholstered chairs and understated pendant light.\nComposition: View from the doorway with the desk facing the window and a chair slightly angled. Eye-level architectural interior photography, natural proportions, straight verticals, realistic materials and soft daylight. The room is empty and ready to use.\nConstraints: One finished photographic image, no collage, no borders, no people, no animals, no room-name lettering, no logos or watermarks. Avoid exaggerated luxury, impossible geometry, illustration or CGI styling. This is a generated alternate visual, not documentary evidence of an existing room."
+    },
+    {
+      "id": "market-870-1242-office-03",
+      "name": "Leopard",
+      "groupId": "market-870-1242",
+      "photos": [
+        "/img/listings/generated/market-870-1242-leopard.png"
+      ],
+      "kind": "generated-alternate",
+      "referenceImage": "/img/listings/870-market-conference.jpg",
+      "prompt": "Use case: photorealistic-natural\nAsset type: office marketplace room photograph, landscape composition.\nPrimary request: Create one distinct alternate office room image for the room named Leopard. Use the supplied reference photo only as a reference for the building's materials, daylight, windows and furnishing style; create a different private workspace rather than duplicating the reference or adding any text.\nInput image 1 role: architectural and photographic style reference.\nScene: Compact professional meeting office, off-white walls, gray carpet, a tall city-facing sash window, light oak table, soft gray upholstered chairs and understated pendant light.\nComposition: View from the opposite corner, with the desk along the side wall and daylight from the left. Eye-level architectural interior photography, natural proportions, straight verticals, realistic materials and soft daylight. The room is empty and ready to use.\nConstraints: One finished photographic image, no collage, no borders, no people, no animals, no room-name lettering, no logos or watermarks. Avoid exaggerated luxury, impossible geometry, illustration or CGI styling. This is a generated alternate visual, not documentary evidence of an existing room."
+    }
+  ]
+}
