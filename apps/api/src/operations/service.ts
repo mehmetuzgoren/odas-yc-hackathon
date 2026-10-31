@@ -41,6 +41,32 @@ export function createOperationsService(rt: Runtime): OperationsService {
   function recordObservation(roomId: string, kind: string, id: string, at: number, data: unknown) {
     rt.db.query('INSERT OR IGNORE INTO device_observations(id,room_id,kind,observed_at,data) VALUES(?,?,?,?,?)').run(id, roomId, kind, at, JSON.stringify(data));
   }
+  async function demoStatus(roomId: string, changes?: { jevEnabled?: boolean; roboEnabled?: boolean }) {
+    const base = String(rt.config.deviceUrl || process.env.DEVICE_URL || `http://127.0.0.1:${process.env.DEVICE_PORT || 7300}`);
+    const response = await fetch(`${base}/v1/rooms/${encodeURIComponent(roomId)}/demo`, {
+      method: changes ? 'PATCH' : 'GET', headers: { authorization: `Bearer ${rt.config.internalToken}`, 'content-type': 'application/json' },
+      ...(changes ? { body: JSON.stringify(changes) } : {}), signal: AbortSignal.timeout(10_000),
+    });
+    const data = await response.json() as any;
+    if (!response.ok) fail(response.status === 404 ? 404 : 503, data.error || 'Device controls are unavailable.');
+    return data;
+  }
+  async function roboEnabled(roomId: string) {
+    try { return (await demoStatus(roomId)).roboEnabled === true; } catch { return false; }
+  }
+  async function requireRobo(roomId: string) {
+    if (!await roboEnabled(roomId)) fail(409, 'Robo cleaning is disabled. Enable Robo on /demo first.', 'robo_disabled');
+  }
+  async function recordInspection(observation: Inspection) {
+    recordObservation(observation.roomId, 'inspection', observation.id, observation.capturedAt, observation);
+    const result = await rt.rooms.command(observation.roomId, { id: `inspection:${observation.id}`, type: 'inspect', now: now(), inspection: observation });
+    await drainRoom(observation.roomId, result.snapshot);
+    return result;
+  }
+  async function observeInspection(observation: Inspection) {
+    if (rt.config.deviceMode !== 'physical' || observation.source !== 'camera' || !explicitBindings.has(observation.roomId)) fail(403, 'This office has no configured physical camera binding.');
+    return recordInspection(observation);
+  }
   async function inspect(roomId: string) {
     let observation: Inspection;
     try { observation = await device.inspect(roomId); }
@@ -48,10 +74,7 @@ export function createOperationsService(rt: Runtime): OperationsService {
       const previous = await rt.rooms.snapshot(roomId);
       observation = { id: uid('inspection'), roomId, source: rt.config.deviceMode === 'simulator' ? 'simulator' : 'camera', capturedAt: now(), inferredAt: now(), sequence: Math.max(Date.now() * 1000, (previous.inspection?.sequence || 0) + 1), occupancy: 'unknown', confidence: 0, floor: 'unknown', surfaces: 'unknown', connection: 'disconnected', error: 'Camera or inspection provider is unavailable; connection requires verification.' };
     }
-    recordObservation(roomId, 'inspection', observation.id, observation.capturedAt, observation);
-    const result = await rt.rooms.command(roomId, { id: `inspection:${observation.id}`, type: 'inspect', now: now(), inspection: observation });
-    await drainRoom(roomId, result.snapshot);
-    return result;
+    return recordInspection(observation);
   }
   async function telemetry(roomId: string) {
     let observation: DeviceTelemetry;
@@ -84,6 +107,10 @@ export function createOperationsService(rt: Runtime): OperationsService {
     let snapshot = await rt.rooms.snapshot(roomId);
     const job = snapshot.job;
     if (!job || job.id !== event.payload.jobId) return { skipped: 'job_changed' };
+    if (!await roboEnabled(roomId)) {
+      if (job.status === 'requested') await command(roomId, { type: 'job_result', jobId: job.id, status: 'interrupted', reason: 'Robo cleaning is disabled.' });
+      return { skipped: 'robo_disabled' };
+    }
     // A prior dispatch may have reached the vendor. Telemetry resolves it, never automatic replay.
     if (job.status !== 'requested') { await telemetry(roomId); return { reconciled: true }; }
     await inspect(roomId); await telemetry(roomId);
@@ -130,7 +157,7 @@ export function createOperationsService(rt: Runtime): OperationsService {
     if (event.type === 'cleaning.requested') return dispatch(event.roomId, event);
     if (event.type === 'cleaning.interrupt_required') return dock(event.roomId, String(event.payload.reason || 'Vacancy evidence is unavailable'), `${event.id}:dock`);
     if (event.type === 'room.inspected' && state.inspection && state.inspection.id === event.payload.inspectionId) {
-      if (state.inspection.floor === 'dirty' && state.inspection.occupancy === 'vacant' && state.inspection.surfaces === 'clear' && state.inspection.confidence >= 0.9 && (!state.job || !['requested', 'dispatching', 'started', 'uncertain'].includes(state.job.status))) {
+      if (state.inspection.floor === 'dirty' && state.inspection.occupancy === 'vacant' && state.inspection.surfaces === 'clear' && state.inspection.confidence >= 0.9 && (!state.job || !['requested', 'dispatching', 'started', 'uncertain'].includes(state.job.status)) && await roboEnabled(event.roomId)) {
         const result = await rt.rooms.command(event.roomId, { id: `${event.id}:clean`, type: 'request_clean', now: now(), jobId: `clean:${event.id}`, expectedReadyAt: now() + Number(rt.config.cleaningEstimateMs || 10 * 60_000) });
         await drainRoom(event.roomId, result.snapshot);
         return { requested: result.ok, code: result.code };
@@ -147,7 +174,8 @@ export function createOperationsService(rt: Runtime): OperationsService {
       let state = await rt.rooms.snapshot(id);
       if (bound) {
         if (!state.device || now() - state.device.observedAt > 15_000 || state.job && ['dispatching', 'started', 'uncertain'].includes(state.job.status)) state = await telemetry(id);
-        if (!state.inspection || now() - state.inspection.capturedAt > 15_000) await inspect(id);
+        const jevOff = rt.config.deviceMode === 'physical' && !(await demoStatus(id)).jevEnabled;
+        if (!state.inspection || now() - state.inspection.capturedAt > 15_000 || jevOff && state.inspection.error !== 'Jev analysis is disabled.') await inspect(id);
       } else {
         // Initialize truthful unknown state once, without polling or publishing repeated unbound observations.
         if (!state.device) await telemetry(id);
@@ -157,10 +185,26 @@ export function createOperationsService(rt: Runtime): OperationsService {
     }
   }
   async function authorizePhysical(roomId: string, commandId: string) {
+    let controls;
+    try { controls = await demoStatus(roomId); } catch { return false; }
+    if (!controls.roboEnabled || rt.config.deviceMode === 'physical' && !controls.jevEnabled) return false;
     const state = await rt.rooms.snapshot(roomId);
     const i = state.inspection;
     if (!state.job || state.job.commandId !== commandId || state.job.status !== 'dispatching' || (state.job.claimExpiresAt || 0) <= now()) return false;
     return state.operational === 'available' && !!i && i.occupancy === 'vacant' && i.confidence >= 0.9 && i.connection === 'connected' && i.surfaces === 'clear' && now() - i.capturedAt <= VACANCY_AGE && i.capturedAt <= now() + 1000;
   }
-  return { device, inspect, telemetry, processEvent, drain, tick, dock, command, authorizePhysical, drainRoom };
+  async function configureDemo(roomId: string, changes: { jevEnabled?: boolean; roboEnabled?: boolean }) {
+    const status = await demoStatus(roomId, changes);
+    if (changes.jevEnabled === false && rt.config.deviceMode === 'physical') await inspect(roomId);
+    if (changes.roboEnabled === false) {
+      const state = await rt.rooms.snapshot(roomId);
+      if (state.job?.status === 'requested') await command(roomId, { type: 'job_result', jobId: state.job.id, status: 'interrupted', reason: 'Robo disabled on /demo.' });
+      else if (state.job && ['dispatching', 'started', 'uncertain'].includes(state.job.status)) {
+        const result = await dock(roomId, 'Robo disabled on /demo.', `demo:robo-off:${state.job.id}`);
+        return { ...status, dockResult: result };
+      }
+    }
+    return status;
+  }
+  return { device, inspect, telemetry, processEvent, drain, tick, dock, command, authorizePhysical, drainRoom, demoStatus, configureDemo, requireRobo, observeInspection };
 }

@@ -3,6 +3,11 @@ import base64
 import os
 from aiohttp import ClientSession
 
+class VisionError(Exception):
+    def __init__(self, message: str, retryable: bool = False):
+        super().__init__(message)
+        self.retryable = retryable
+
 class Vision:
     """TypeSafe Jev image API; answers are evidence, never direct room/robot actions."""
     def __init__(self, session: ClientSession):
@@ -19,8 +24,10 @@ class Vision:
         }
         body = {'model': os.environ.get('TYPESAFE_MODEL', 'jev-latest'), 'state': {'office_camera': 'odas-frame'}, 'assets': {'odas-frame': {'type': 'image', 'format': 'jpg', 'data_base64': base64.b64encode(jpeg).decode('ascii')}}, 'questions': questions}
         async with self.session.post('https://api.typesafe.ai/v1/systemone', json=body, headers={'Authorization': f'Bearer {self.key}', 'TypeSafe-Danger-Zone-Images': 'true'}, timeout=15) as response:
+            if response.status in (429, 529):
+                raise VisionError('Jev is rate limited or overloaded; retrying after a short delay.', retryable=True)
             if response.status != 200:
-                raise ValueError('TypeSafe image inspection request failed')
+                raise VisionError('TypeSafe image inspection request failed.')
             answers = (await response.json())['answers']
         result = {}
         confidences = []

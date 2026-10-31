@@ -80,6 +80,9 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) globalThis.process.once(sig
 
 const phases: string[] = [];
 try {
+  console.log('Checking live capture cadence, concurrent inference, and demo control boundaries with isolated HTTP fixtures.');
+  await run(['uv', 'run', '--project', 'workers/device', 'python', 'workers/device/verify_live.py'], { ...process.env, INTERNAL_TOKEN: secret });
+  phases.push('four-FPS capture/inference, disabled defaults, cancellation and Robo command boundaries through HTTP fixtures');
   console.log('Checking serialized inventory and cleaning safety with a real isolated Terse runtime.');
   const nativeDir = join(dataDir, 'native');
   let native = await launchActor(7191, 'odas-ops-verification', nativeDir);
