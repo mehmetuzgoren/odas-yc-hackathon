@@ -11,7 +11,7 @@ import { HttpError, type Runtime } from './core';
 import { modelStatus } from './ai';
 
 export async function createApp() {
- const config=loadConfig();const db=openDatabase(config.dataDir);
+ const config=loadConfig();const db=await openDatabase(config.dataDir);
  const [{createRoomGateway},{createCatalogService,createCatalogRoutes},{createCommerceService,createCommerceRoutes},{createOperationsService,createOperationsRoutes},{createConciergeService,createConciergeRoutes}]=await Promise.all([import('./operations/gateway'),import('./catalog'),import('./commerce'),import('./operations'),import('./concierge')]);
  const rt:Runtime={config,db,clock:createClock(config),rooms:createRoomGateway(),services:{} as Runtime['services']};
  rt.services.catalog=createCatalogService(rt);rt.services.commerce=createCommerceService(rt);rt.services.operations=createOperationsService(rt);rt.services.concierge=createConciergeService(rt);
@@ -29,11 +29,11 @@ export async function createApp() {
   if(c.req.header('Origin')!==config.origin)return c.json({error:'This request must come from the ODAS application.',code:'invalid_origin'},403);
   const token=c.req.header('X-CSRF-Token')||'';
   let expected=getCookie(c,'odas_csrf')||'';
-  const session=getCookie(c,'odas_session');if(session){const hash=new Bun.CryptoHasher('sha256').update(session).digest('hex');const row=db.query('SELECT csrf_token FROM sessions WHERE id_hash=? AND expires_at>?').get(hash,rt.clock.now()) as any;if(row)expected=row.csrf_token;}
+  const session=getCookie(c,'odas_session');if(session){const hash=new Bun.CryptoHasher('sha256').update(session).digest('hex');const row=await db.query('SELECT csrf_token FROM sessions WHERE id_hash=? AND expires_at>?').get(hash,rt.clock.now()) as any;if(row)expected=row.csrf_token;}
   if(!token||!expected||token.length!==expected.length||!timingSafeEqual(Buffer.from(token),Buffer.from(expected)))return c.json({error:'Refresh the page and try again.',code:'invalid_csrf'},403);
   return next();
  });
- app.get('/api/health',c=>c.json({ok:true,application:'ODAS',contractVersion:1,namespace:config.namespace,inventory:'modeled',devices:config.deviceMode,payments:config.stripeSecretKey?'stripe_sandbox':'unconfigured',concierge:modelStatus().mode,model:modelStatus().model}));
+ app.get('/api/health',c=>c.json({ok:true,application:'ODAS',contractVersion:1,database:db.dialect,namespace:config.namespace,inventory:'modeled',devices:config.deviceMode,payments:config.stripeSecretKey?'stripe_sandbox':'unconfigured',concierge:modelStatus().mode,model:modelStatus().model}));
  app.route('/api',createCatalogRoutes(rt));app.route('/api',createCommerceRoutes(rt));app.route('/api',createOperationsRoutes(rt));app.route('/api',createConciergeRoutes(rt));
  app.all('/api/*',c=>c.json({error:'API route not found.'},404));
  const webRoot=resolve('apps/web/dist');
@@ -49,5 +49,5 @@ if(import.meta.main){
  let stopped=false;
  async function maintenance(){while(!stopped){try{await runtime.services.commerce.recover();await runtime.services.operations.tick();}catch(error){console.warn('[maintenance]',error instanceof Error?error.message:'Retry pending');}await new Promise(r=>setTimeout(r,3000));}}
  void maintenance();
- const stop=()=>{stopped=true;server.stop();runtime.db.close();process.exit(0);};process.on('SIGTERM',stop);process.on('SIGINT',stop);
+ const stop=async ()=>{stopped=true;server.stop();await runtime.db.close();process.exit(0);};process.on('SIGTERM',stop);process.on('SIGINT',stop);
 }

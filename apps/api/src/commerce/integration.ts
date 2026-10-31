@@ -26,7 +26,7 @@ export async function runCommerceIntegration() {
   config.namespace = `test-commerce-${run}`;
   config.testMode = true;
   config.deviceMode = 'simulator';
-  const db = openDatabase(config.dataDir);
+  const db = await openDatabase(config.dataDir);
   let now = Date.now();
   const rt: Runtime = { config, db, clock: { now: () => now }, rooms: createRoomGateway(), services: {} as any };
   rt.services.catalog = createCatalogService(rt);
@@ -36,8 +36,8 @@ export async function runCommerceIntegration() {
   const group = `commerce-${run}`;
   const roomA = `${group}-a`;
   const roomB = `${group}-b`;
-  db.query('INSERT INTO workspace_groups(id,name,address,latitude,longitude,base_rate_cents,timezone,modeled,description,hours_json) VALUES(?,?,?,0,0,500,\'America/Los_Angeles\',1,?,?)').run(group, 'Commerce integration fixture', 'Synthetic inventory', 'Synthetic test fixture, not live supply.', JSON.stringify({ open: '08:00', close: '20:00', days: [1, 2, 3, 4, 5, 6, 7], modeled: true }));
-  for (const id of [roomA, roomB]) db.query('INSERT INTO offices(id,group_id,name,description,attributes_json) VALUES(?,?,?,?,?)').run(id, group, id === roomA ? 'Office A' : 'Office B', 'Synthetic equivalent fixture.', JSON.stringify({ synthetic: true, equivalenceClass: 'commerce-fixture', capacity: 1, desk: true }));
+  await db.query('INSERT INTO workspace_groups(id,name,address,latitude,longitude,base_rate_cents,timezone,modeled,description,hours_json) VALUES(?,?,?,0,0,500,\'America/Los_Angeles\',1,?,?)').run(group, 'Commerce integration fixture', 'Synthetic inventory', 'Synthetic test fixture, not live supply.', JSON.stringify({ open: '08:00', close: '20:00', days: [1, 2, 3, 4, 5, 6, 7], modeled: true }));
+  for (const id of [roomA, roomB]) await db.query('INSERT INTO offices(id,group_id,name,description,attributes_json) VALUES(?,?,?,?,?)').run(id, group, id === roomA ? 'Office A' : 'Office B', 'Synthetic equivalent fixture.', JSON.stringify({ synthetic: true, equivalenceClass: 'commerce-fixture', capacity: 1, desk: true }));
   const app = new Hono();
   app.route('/api', createCommerceRoutes(rt));
   rt.services.operations = createOperationsService(rt);
@@ -50,12 +50,12 @@ export async function runCommerceIntegration() {
   const end = start + 2 * 3_600_000;
   const password = `Fixture!${crypto.randomUUID()}`;
   const response = await app.request('http://localhost/api/auth/signup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Commerce fixture', email: `${run}@example.test`, password }) });
-  assert.equal(response.status, 201);
+  assert.equal(response.status, 201, await response.clone().text());
   const auth = await response.json() as { user: User; csrfToken: string };
   assert.equal(auth.user.role, 'guest');
   const cookies = response.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
   assert.ok(response.headers.getSetCookie().some(value => value.startsWith('odas_session=') && value.includes('HttpOnly')));
-  const stored = db.query('SELECT password_hash FROM users WHERE id=?').get(auth.user.id) as any;
+  const stored = await db.query('SELECT password_hash FROM users WHERE id=?').get(auth.user.id) as any;
   assert.ok(stored.password_hash.startsWith('$argon2id$'));
   const session = await app.request('http://localhost/api/auth/session', { headers: { Cookie: cookies } });
   assert.equal((await session.json() as any).user.id, auth.user.id);
@@ -67,7 +67,7 @@ export async function runCommerceIntegration() {
   const q2 = await commerce.quote(auth.user, { roomId: roomA, startAt: start, endAt: end });
   assert.equal(q1.subtotalCents, 1000); assert.equal(q1.feeCents, 100); assert.equal(q1.totalCents, 1100);
   assert.ok(q1.cancellationPolicy.includes('Full refund'));
-  const raced = await Promise.allSettled([commerce.hold(auth.user, q1.id), commerce.hold(auth.user, q2.id)]);
+  const raced = await Promise.allSettled([await commerce.hold(auth.user, q1.id), await commerce.hold(auth.user, q2.id)]);
   assert.equal(raced.filter(r => r.status === 'fulfilled').length, 1);
   const winner = (raced.find(r => r.status === 'fulfilled') as PromiseFulfilledResult<Reservation>).value;
   const retry = await commerce.hold(auth.user, winner.quoteId);
@@ -101,7 +101,7 @@ export async function runCommerceIntegration() {
     await commerce.handleWebhook(payload, signature);
     await commerce.handleWebhook(payload, signature);
     await assert.rejects(commerce.handleWebhook(payload + ' ', signature), (e: any) => e.status === 400);
-    assert.equal((db.query('SELECT count(*) AS n FROM payment_events WHERE id=?').get(`evt_${run}`) as any).n, 1);
+    assert.equal((await db.query('SELECT count(*) AS n FROM payment_events WHERE id=?').get(`evt_${run}`) as any).n, 1);
     pass('signed raw-body webhook, duplicate event replay, invalid-signature rejection (actual sandbox session retrieval)');
   } else {
     await assert.rejects(commerce.checkout(auth.user, winner.id), (e: any) => e.code === 'stripe_not_configured');
@@ -113,7 +113,7 @@ export async function runCommerceIntegration() {
   const quote = await commerce.quote(auth.user, { roomId: roomA, startAt: start, endAt: end });
   const booking = await commerce.hold(auth.user, quote.id);
   assert.equal((await rt.rooms.command(roomA, { id: `${booking.id}:fixture-confirm`, type: 'confirm', bookingId: booking.id, now })).ok, true);
-  db.query('UPDATE reservations SET status=\'confirmed\',payment_status=\'paid\',data=json_set(data,\'$.syntheticPaymentFixture\',1),revision=revision+1 WHERE id=?').run(booking.id);
+  await db.query('UPDATE reservations SET status=\'confirmed\',payment_status=\'paid\',data=json_set(data,\'$.syntheticPaymentFixture\',1),revision=revision+1 WHERE id=?').run(booking.id);
   const inspect = await rt.rooms.command(roomA, { id: `${booking.id}:vacancy`, type: 'inspect', now, inspection: { id: `inspection-${run}`, roomId: roomA, source: 'simulator', capturedAt: now, inferredAt: now, sequence: 1, occupancy: 'vacant', confidence: 0.99, floor: 'dirty', surfaces: 'clear', connection: 'connected' } });
   assert.equal(inspect.ok, true);
   await rt.rooms.command(roomA, { id: `${booking.id}:clean-request`, type: 'request_clean', jobId: `job-${run}`, expectedReadyAt: start + 5 * 60_000, now });
@@ -131,16 +131,16 @@ export async function runCommerceIntegration() {
   assert.equal((await rt.rooms.snapshot(roomA)).intervals.find(i => i.bookingId === booking.id)?.status, 'canceled');
   const retrySwap = await commerce.acceptOffer(auth.user, second.id);
   assert.equal(retrySwap.roomId, roomB);
-  assert.equal((db.query('SELECT count(*) AS n FROM swaps WHERE booking_id=?').get(booking.id) as any).n, 1);
+  assert.equal((await db.query('SELECT count(*) AS n FROM swaps WHERE booking_id=?').get(booking.id) as any).n, 1);
   pass('synthetic equivalent recovery through real booking services/native inventory; decline, accept, stable ID/time/price, replay');
 
   const recoveryRoom = `${group}-recovery`;
-  db.query('INSERT INTO offices(id,group_id,name,description,attributes_json) VALUES(?,?,?,?,?)').run(recoveryRoom, group, 'Recovery fixture', 'Synthetic equivalent fixture.', JSON.stringify({ synthetic: true, equivalenceClass: 'commerce-fixture', capacity: 1, desk: true }));
+  await db.query('INSERT INTO offices(id,group_id,name,description,attributes_json) VALUES(?,?,?,?,?)').run(recoveryRoom, group, 'Recovery fixture', 'Synthetic equivalent fixture.', JSON.stringify({ synthetic: true, equivalenceClass: 'commerce-fixture', capacity: 1, desk: true }));
   await rt.rooms.command(roomB, { id: `${booking.id}:replacement-dirty`, type: 'inspect', now, inspection: { id: `replacement-inspection-${run}`, roomId: roomB, source: 'simulator', capturedAt: now, inferredAt: now, sequence: 1, occupancy: 'vacant', confidence: 0.99, floor: 'dirty', surfaces: 'clear', connection: 'connected' } });
   await rt.rooms.command(roomB, { id: `${booking.id}:replacement-clean`, type: 'request_clean', jobId: `replacement-job-${run}`, expectedReadyAt: start + 5 * 60_000, now });
   const expiredOffer = await commerce.offerReplacement(booking.id);
   assert.ok(expiredOffer);
-  db.query('UPDATE offers SET expires_at=? WHERE id=?').run(now - 1, expiredOffer.id);
+  await db.query('UPDATE offers SET expires_at=? WHERE id=?').run(now - 1, expiredOffer.id);
   await assert.rejects(commerce.acceptOffer(auth.user, expiredOffer.id), (e: any) => e.code === 'offer_expired');
   assert.equal((await commerce.get(auth.user, booking.id)).roomId, roomB);
   const recoveryOffer = await commerce.offerReplacement(booking.id);
@@ -165,11 +165,11 @@ export async function runCommerceIntegration() {
   const recovered = await restartedCommerce.get(auth.user, booking.id);
   assert.equal(recovered.roomId, recoveryRoom); assert.equal(recovered.id, booking.id); assert.equal(recovered.totalCents, booking.totalCents);
   assert.equal((await actualGateway.snapshot(roomB)).intervals.find(i => i.bookingId === booking.id)?.status, 'canceled');
-  assert.equal((db.query('SELECT count(*) AS n FROM swaps WHERE booking_id=? AND stage=\'complete\'').get(booking.id) as any).n, 2);
+  assert.equal((await db.query('SELECT count(*) AS n FROM swaps WHERE booking_id=? AND stage=\'complete\'').get(booking.id) as any).n, 2);
   pass('expired offer preserves assignment; interrupted confirmed replacement recovers after service restart without another payment');
 
   const thirdRoom = `${group}-c`;
-  db.query('INSERT INTO offices(id,group_id,name,description) VALUES(?,?,?,?)').run(thirdRoom, group, 'Expiry fixture', 'Synthetic expiry fixture.');
+  await db.query('INSERT INTO offices(id,group_id,name,description) VALUES(?,?,?,?)').run(thirdRoom, group, 'Expiry fixture', 'Synthetic expiry fixture.');
   const expiryQuote = await commerce.quote(auth.user, { roomId: thirdRoom, startAt: start + 4 * 3_600_000, endAt: end + 4 * 3_600_000 });
   const expiryHold = await commerce.hold(auth.user, expiryQuote.id);
   now += 46 * 60_000;
@@ -180,7 +180,7 @@ export async function runCommerceIntegration() {
   pass('controlled-clock hold expiry and persisted workflow recovery in isolated actor namespace');
   const hostId = `host-view-${run}`;
   const hostEmail = `host-view-${run}@example.test`;
-  db.query("INSERT INTO users(id,email,password_hash,name,role,test_account,created_at) VALUES(?,?,?,?,'operator',1,?)").run(hostId, hostEmail, stored.password_hash, 'Host viewing fixture', now);
+  await db.query("INSERT INTO users(id,email,password_hash,name,role,test_account,created_at) VALUES(?,?,?,?,'operator',1,?)").run(hostId, hostEmail, stored.password_hash, 'Host viewing fixture', now);
   const hostLogin = await app.request('http://localhost/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: hostEmail, password }) });
   assert.equal(hostLogin.status, 200);
   const hostCookies = hostLogin.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
@@ -197,7 +197,7 @@ export async function runCommerceIntegration() {
   try {
     const view = (path: string, cookie = hostCookies) => app.request(`http://localhost/api/operator/rooms/${roomA}${path}`, { headers: { Cookie: cookie } });
     assert.equal((await view('')).status, 403);
-    db.query('INSERT INTO operator_scopes(user_id,group_id) VALUES(?,?)').run(hostId, group);
+    await db.query('INSERT INTO operator_scopes(user_id,group_id) VALUES(?,?)').run(hostId, group);
     for (const path of ['', '/demo', '/frame']) assert.equal((await view(path)).status, 200);
     assert.equal((await view('/frame', '')).status, 401);
     assert.equal((await view('/frame', cookies)).status, 403);
@@ -209,7 +209,7 @@ export async function runCommerceIntegration() {
     assert.equal(deviceMutations, 0);
     pass('assigned test hosts can view physical room details, demo status and camera frames; guests and device-control mutations remain blocked');
     assert.equal((await (await view('')).json() as any).canControlDevices, false);
-    db.query('INSERT INTO operator_device_grants(user_id,room_id) VALUES(?,?)').run(hostId, roomA);
+    await db.query('INSERT INTO operator_device_grants(user_id,room_id) VALUES(?,?)').run(hostId, roomA);
     assert.equal((await (await view('')).json() as any).canControlDevices, true);
     const granted = await app.request(`http://localhost/api/operator/rooms/${roomA}/demo`, { method: 'PATCH', headers: { Cookie: hostCookies, 'Content-Type': 'application/json' }, body: JSON.stringify({ jevEnabled: true }) });
     assert.equal(granted.status, 200); assert.equal(deviceMutations, 1);
@@ -225,7 +225,7 @@ export async function runCommerceIntegration() {
   // Rows alone do not reserve native actor inventory; cover both stores and reruns.
   await seed(db, config.dataDir);
   const demoDate = Temporal.Instant.fromEpochMilliseconds(now).toZonedDateTimeISO('America/Los_Angeles').toPlainDate().add({ days: 1 }).toString();
-  const firstRooms = (db.query("SELECT id FROM offices WHERE id LIKE '%-office-01'").all() as { id: string }[]);
+  const firstRooms = (await db.query("SELECT id FROM offices WHERE id LIKE '%-office-01'").all() as { id: string }[]);
   const firstIntervals = await Promise.all(firstRooms.map(async room => (await rt.rooms.snapshot(room.id)).intervals));
   const protectedStart = Temporal.ZonedDateTime.from(`${demoDate}T15:00[America/Los_Angeles]`).epochMilliseconds;
   const protectedQuote = await commerce.quote(auth.user, { roomId: 'polk-310-office-03', startAt: protectedStart, endAt: protectedStart + 2 * 3_600_000 });
@@ -236,7 +236,7 @@ export async function runCommerceIntegration() {
   const again = await seedReservations(rt, { date: demoDate, days: 1 });
   assert.equal(again.created, 0); assert.equal(again.existing, seeded.created);
   for (const [index, room] of firstRooms.entries()) assert.deepEqual((await rt.rooms.snapshot(room.id)).intervals, firstIntervals[index]);
-  const demo = db.query("SELECT * FROM reservations WHERE room_id='polk-310-office-02' AND payment_status='demo' AND status='confirmed' ORDER BY start_at LIMIT 1").get() as any;
+  const demo = await db.query("SELECT * FROM reservations WHERE room_id='polk-310-office-02' AND payment_status='demo' AND status='confirmed' ORDER BY start_at LIMIT 1").get() as any;
   assert.ok(demo); assert.equal(demo.payment_intent_id, null); assert.equal(demo.checkout_session_id, null);
   assert.equal((await rt.rooms.snapshot(demo.room_id)).intervals.find(value => value.bookingId === demo.id)?.status, 'confirmed');
   assert.equal((await rt.services.catalog.office(demo.room_id, { startAt: demo.start_at, endAt: demo.end_at })).available, false);
@@ -247,35 +247,37 @@ export async function runCommerceIntegration() {
   pass('demo schedule seeds confirmed native reservations, rejects overlapping quotes and holds, preserves other bookings and first rooms, and reruns without duplicates or payments');
 
   const chatRoom = `${group}-conversation`;
-  db.query('INSERT INTO offices(id,group_id,name,description) VALUES(?,?,?,?)').run(chatRoom, group, 'Conversation fixture', 'Isolated event conversation fixture.');
+  await db.query('INSERT INTO offices(id,group_id,name,description) VALUES(?,?,?,?)').run(chatRoom, group, 'Conversation fixture', 'Isolated event conversation fixture.');
   let sequence = 0;
   const observe = async (floor: 'clean' | 'dirty', occupancy: 'vacant' | 'occupied' = 'vacant') => {
     const result = await rt.rooms.command(chatRoom, { id: `chat-inspect-${++sequence}`, type: 'inspect', now, inspection: { id: `chat-frame-${sequence}`, roomId: chatRoom, source: 'simulator', capturedAt: now, inferredAt: now, sequence, connection: 'connected', occupancy, floor, surfaces: 'clear', confidence: .99 } });
-    assert.ok(result.ok); recordRoomConversation(rt, result.snapshot); await recordConciergeConversation(rt, result.snapshot); return result.snapshot;
+    assert.ok(result.ok); await Promise.all([recordRoomConversation(rt, result.snapshot), recordRoomConversation(rt, result.snapshot)]); await recordConciergeConversation(rt, result.snapshot); return result.snapshot;
   };
   const oldState = await observe('dirty');
-  const initialMessages = roomConversation(rt, chatRoom).length;
+  const initialTranscript = await roomConversation(rt, chatRoom);
+  const initialMessages = initialTranscript.length;
+  assert.equal(initialTranscript.filter(item => item.source === 'Inspection (simulator)').length, 1, 'Concurrent observation replay must store one semantic transition.');
   for (let index = 0; index < 5; index++) await observe('dirty');
-  assert.equal(roomConversation(rt, chatRoom).length, initialMessages);
+  assert.equal((await roomConversation(rt, chatRoom)).length, initialMessages);
   await observe('clean');
-  const changedMessages = roomConversation(rt, chatRoom).length;
-  recordRoomConversation(rt, oldState); await recordConciergeConversation(rt, oldState);
-  assert.equal(roomConversation(rt, chatRoom).length, changedMessages);
+  const changedMessages = (await roomConversation(rt, chatRoom)).length;
+  await recordRoomConversation(rt, oldState); await recordConciergeConversation(rt, oldState);
+  assert.equal((await roomConversation(rt, chatRoom)).length, changedMessages);
   await observe('clean', 'occupied');
-  assert.ok((roomConversation(rt, chatRoom) as any[]).some(item => item.source === 'Room agent' && item.target === 'Concierge' && item.body.includes('someone is in the room')));
-  assert.ok(!(roomConversation(rt, chatRoom) as any[]).some(item => item.body.includes('I have started cleaning')));
+  assert.ok((await roomConversation(rt, chatRoom) as any[]).some(item => item.source === 'Room agent' && item.target === 'Concierge' && item.body.includes('someone is in the room')));
+  assert.ok(!(await roomConversation(rt, chatRoom) as any[]).some(item => item.body.includes('I have started cleaning')));
   const robot = async (battery: number) => {
     const observed = await rt.rooms.command(chatRoom, { id: `chat-robot-${battery}`, type: 'telemetry', now, telemetry: { roomId: chatRoom, source: 'simulator', observedAt: now, connection: 'connected', state: 'docked', battery } });
-    assert.ok(observed.ok); recordRoomConversation(rt, observed.snapshot); return observed.snapshot;
+    assert.ok(observed.ok); await recordRoomConversation(rt, observed.snapshot); return observed.snapshot;
   };
   await robot(99);
-  const beforeBatteryChange = roomConversation(rt, chatRoom).length;
+  const beforeBatteryChange = (await roomConversation(rt, chatRoom)).length;
   const robotState = await robot(98);
-  assert.equal(roomConversation(rt, chatRoom).length, beforeBatteryChange);
-  now += 60_001; recordRoomConversation(rt, robotState);
-  assert.ok((roomConversation(rt, chatRoom) as any[]).some(item => item.source === 'Robo' && item.body.includes('telemetry is stale')));
+  assert.equal((await roomConversation(rt, chatRoom)).length, beforeBatteryChange);
+  now += 60_001; await recordRoomConversation(rt, robotState);
+  assert.ok((await roomConversation(rt, chatRoom) as any[]).some(item => item.source === 'Robo' && item.body.includes('telemetry is stale')));
   pass('room conversation suppresses repeated frames, ignores old snapshots, reports meaningful decisions and never claims unobserved cleaning');
-  db.close();
+  await db.close();
   console.log(JSON.stringify({ checks: checks.length, dataDir: config.dataDir, actorUrl: process.env.TERSE_ACTOR_URL, paymentEvidence: config.stripeSecretKey ? 'real sandbox Checkout and expiration; successful payment/refund not exercised here' : 'not configured' }));
   return checks;
 }

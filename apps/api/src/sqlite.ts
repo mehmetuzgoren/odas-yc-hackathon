@@ -1,0 +1,61 @@
+import { Database } from 'bun:sqlite';
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+
+export function openSqliteDatabase(dataDir: string) {
+ mkdirSync(dataDir, {recursive:true});
+ const db = new Database(join(dataDir,'odas.sqlite'), {create:true});
+ db.exec('PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;');
+ db.exec(`
+ CREATE TABLE IF NOT EXISTS schema_migrations(version INTEGER PRIMARY KEY,applied_at INTEGER NOT NULL);
+ CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,email TEXT NOT NULL UNIQUE COLLATE NOCASE,password_hash TEXT NOT NULL,name TEXT NOT NULL,role TEXT NOT NULL CHECK(role IN ('guest','operator')),test_account INTEGER NOT NULL DEFAULT 0,created_at INTEGER NOT NULL);
+ CREATE TABLE IF NOT EXISTS sessions(id_hash TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),expires_at INTEGER NOT NULL,csrf_token TEXT NOT NULL,created_at INTEGER NOT NULL);
+ CREATE INDEX IF NOT EXISTS sessions_user ON sessions(user_id);
+ CREATE TABLE IF NOT EXISTS operator_scopes(user_id TEXT NOT NULL REFERENCES users(id),group_id TEXT NOT NULL,PRIMARY KEY(user_id,group_id));
+ CREATE TABLE IF NOT EXISTS operator_device_grants(user_id TEXT NOT NULL REFERENCES users(id),room_id TEXT NOT NULL REFERENCES offices(id),PRIMARY KEY(user_id,room_id));
+ CREATE TABLE IF NOT EXISTS workspace_groups(id TEXT PRIMARY KEY,name TEXT NOT NULL,address TEXT NOT NULL,latitude REAL NOT NULL,longitude REAL NOT NULL,base_rate_cents INTEGER NOT NULL,timezone TEXT NOT NULL,modeled INTEGER NOT NULL DEFAULT 1,description TEXT NOT NULL,hours_json TEXT NOT NULL,photos_json TEXT NOT NULL DEFAULT '[]',attributes_json TEXT NOT NULL DEFAULT '{}',access_instructions TEXT,data TEXT NOT NULL DEFAULT '{}');
+ CREATE TABLE IF NOT EXISTS offices(id TEXT PRIMARY KEY,group_id TEXT NOT NULL REFERENCES workspace_groups(id),name TEXT NOT NULL,description TEXT NOT NULL,rate_cents INTEGER,modeled INTEGER NOT NULL DEFAULT 1,photos_json TEXT NOT NULL DEFAULT '[]',attributes_json TEXT NOT NULL DEFAULT '{}',device_binding_json TEXT,data TEXT NOT NULL DEFAULT '{}');
+ CREATE INDEX IF NOT EXISTS offices_group ON offices(group_id);
+ CREATE TABLE IF NOT EXISTS quotes(id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),room_id TEXT NOT NULL REFERENCES offices(id),start_at INTEGER NOT NULL,end_at INTEGER NOT NULL,rate_cents INTEGER NOT NULL,subtotal_cents INTEGER NOT NULL,fee_cents INTEGER NOT NULL,total_cents INTEGER NOT NULL,currency TEXT NOT NULL,expires_at INTEGER NOT NULL,data TEXT NOT NULL DEFAULT '{}');
+ CREATE TABLE IF NOT EXISTS reservations(id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),room_id TEXT NOT NULL REFERENCES offices(id),original_room_id TEXT NOT NULL,group_id TEXT NOT NULL,quote_id TEXT NOT NULL UNIQUE,start_at INTEGER NOT NULL,end_at INTEGER NOT NULL,subtotal_cents INTEGER NOT NULL,fee_cents INTEGER NOT NULL,total_cents INTEGER NOT NULL,currency TEXT NOT NULL,status TEXT NOT NULL,payment_status TEXT NOT NULL,refund_status TEXT NOT NULL,checkout_session_id TEXT UNIQUE,payment_intent_id TEXT UNIQUE,checkout_url TEXT,hold_expires_at INTEGER,idempotency_key TEXT,revision INTEGER NOT NULL DEFAULT 0,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,data TEXT NOT NULL DEFAULT '{}',UNIQUE(user_id,idempotency_key));
+ CREATE INDEX IF NOT EXISTS reservations_user ON reservations(user_id,created_at);
+ CREATE INDEX IF NOT EXISTS reservations_room ON reservations(room_id,start_at,end_at);
+ CREATE TABLE IF NOT EXISTS payment_events(id TEXT PRIMARY KEY,type TEXT NOT NULL,session_id TEXT,status TEXT NOT NULL,data TEXT NOT NULL,error TEXT,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL);
+ CREATE TABLE IF NOT EXISTS refunds(id TEXT PRIMARY KEY,booking_id TEXT NOT NULL UNIQUE,stripe_refund_id TEXT UNIQUE,status TEXT NOT NULL,reason TEXT NOT NULL,amount_cents INTEGER NOT NULL,data TEXT NOT NULL DEFAULT '{}',error TEXT,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL);
+ CREATE TABLE IF NOT EXISTS offers(id TEXT PRIMARY KEY,booking_id TEXT NOT NULL,room_id TEXT NOT NULL,status TEXT NOT NULL,expires_at INTEGER NOT NULL,room_revision INTEGER NOT NULL,data TEXT NOT NULL DEFAULT '{}',created_at INTEGER NOT NULL);
+ CREATE INDEX IF NOT EXISTS offers_booking ON offers(booking_id,status);
+ CREATE TABLE IF NOT EXISTS swaps(id TEXT PRIMARY KEY,booking_id TEXT NOT NULL,offer_id TEXT NOT NULL UNIQUE,from_room_id TEXT NOT NULL,to_room_id TEXT NOT NULL,stage TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 0,error TEXT,data TEXT NOT NULL DEFAULT '{}',created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL);
+ CREATE TABLE IF NOT EXISTS workflow_leases(key TEXT PRIMARY KEY,owner TEXT NOT NULL,expires_at INTEGER NOT NULL);
+ CREATE TABLE IF NOT EXISTS auth_attempts(key TEXT PRIMARY KEY,count INTEGER NOT NULL,reset_at INTEGER NOT NULL);
+ CREATE TABLE IF NOT EXISTS attention_tasks(id TEXT PRIMARY KEY,room_id TEXT NOT NULL,reason TEXT NOT NULL,status TEXT NOT NULL,assignee TEXT,resolution_evidence TEXT,created_at INTEGER NOT NULL,resolved_at INTEGER,data TEXT NOT NULL DEFAULT '{}');
+ CREATE INDEX IF NOT EXISTS attention_room ON attention_tasks(room_id,status);
+ CREATE TABLE IF NOT EXISTS device_commands(id TEXT PRIMARY KEY,room_id TEXT NOT NULL,kind TEXT NOT NULL,status TEXT NOT NULL,job_id TEXT,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,data TEXT NOT NULL DEFAULT '{}');
+ CREATE TABLE IF NOT EXISTS device_observations(id TEXT PRIMARY KEY,room_id TEXT NOT NULL,kind TEXT NOT NULL,observed_at INTEGER NOT NULL,data TEXT NOT NULL);
+ CREATE TABLE IF NOT EXISTS audit_log(id TEXT PRIMARY KEY,actor TEXT NOT NULL,action TEXT NOT NULL,entity_id TEXT NOT NULL,data TEXT NOT NULL,created_at INTEGER NOT NULL);
+ CREATE TABLE IF NOT EXISTS outbox(id TEXT PRIMARY KEY,target TEXT NOT NULL,event_json TEXT NOT NULL,status TEXT NOT NULL,attempts INTEGER NOT NULL DEFAULT 0,next_attempt_at INTEGER NOT NULL,created_at INTEGER NOT NULL,delivered_at INTEGER,result_json TEXT,error TEXT,relay_message_id TEXT,last_error TEXT,completed_at INTEGER);
+ CREATE INDEX IF NOT EXISTS outbox_pending ON outbox(status,next_attempt_at);
+ CREATE TABLE IF NOT EXISTS processed_messages(id TEXT PRIMARY KEY,worker TEXT NOT NULL,event_id TEXT NOT NULL,status TEXT NOT NULL,result_json TEXT,error TEXT,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,UNIQUE(worker,event_id));
+ CREATE TABLE IF NOT EXISTS relay_identities(name TEXT PRIMARY KEY,agent_id TEXT,token TEXT,data TEXT NOT NULL DEFAULT '{}',created_at INTEGER NOT NULL);
+ CREATE TABLE IF NOT EXISTS conversations(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,booking_id TEXT,title TEXT NOT NULL DEFAULT 'ODAS concierge',created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,data TEXT NOT NULL DEFAULT '{}');
+ CREATE INDEX IF NOT EXISTS conversations_user ON conversations(user_id,updated_at);
+ CREATE TABLE IF NOT EXISTS chat_messages(id TEXT PRIMARY KEY,conversation_id TEXT NOT NULL REFERENCES conversations(id),role TEXT NOT NULL,content TEXT NOT NULL,created_at INTEGER NOT NULL,data TEXT NOT NULL DEFAULT '{}',idempotency_key TEXT UNIQUE);
+ CREATE TABLE IF NOT EXISTS notifications(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,booking_id TEXT,type TEXT NOT NULL,title TEXT NOT NULL,body TEXT NOT NULL,created_at INTEGER NOT NULL,read_at INTEGER,open_concierge INTEGER NOT NULL DEFAULT 0,idempotency_key TEXT UNIQUE,data TEXT NOT NULL DEFAULT '{}');
+ CREATE INDEX IF NOT EXISTS notifications_user ON notifications(user_id,created_at);
+ CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
+ CREATE TABLE IF NOT EXISTS room_conversation(id INTEGER PRIMARY KEY AUTOINCREMENT,room_id TEXT NOT NULL,source TEXT NOT NULL,target TEXT NOT NULL,body TEXT NOT NULL,occurred_at INTEGER NOT NULL);
+ CREATE INDEX IF NOT EXISTS room_conversation_room ON room_conversation(room_id,id);
+ CREATE TABLE IF NOT EXISTS room_conversation_state(room_id TEXT NOT NULL,channel TEXT NOT NULL,signature TEXT NOT NULL,revision INTEGER NOT NULL,PRIMARY KEY(room_id,channel));
+ INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(1,unixepoch()*1000);
+ `);
+ const swapsSchema = (db.query("SELECT sql FROM sqlite_master WHERE type='table' AND name='swaps'").get() as {sql:string}).sql;
+ if (/booking_id TEXT NOT NULL UNIQUE/.test(swapsSchema)) db.transaction(()=>{
+  db.exec(`ALTER TABLE swaps RENAME TO swaps_v1;
+   CREATE TABLE swaps(id TEXT PRIMARY KEY,booking_id TEXT NOT NULL,offer_id TEXT NOT NULL UNIQUE,from_room_id TEXT NOT NULL,to_room_id TEXT NOT NULL,stage TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 0,error TEXT,data TEXT NOT NULL DEFAULT '{}',created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL);
+   INSERT INTO swaps SELECT * FROM swaps_v1; DROP TABLE swaps_v1;`);
+ })();
+ db.exec('CREATE INDEX IF NOT EXISTS swaps_booking ON swaps(booking_id,created_at); INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(2,unixepoch()*1000);');
+ const conversationColumns = db.query('PRAGMA table_info(room_conversation)').all() as { name: string }[];
+ if (!conversationColumns.some(column => column.name === 'data')) db.exec("ALTER TABLE room_conversation ADD COLUMN data TEXT NOT NULL DEFAULT '{}'");
+ db.exec('INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(3,unixepoch()*1000);');
+ return db;
+}

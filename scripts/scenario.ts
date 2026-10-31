@@ -63,16 +63,16 @@ export async function runScenario() {
   }
   clock(logicalNow);
   const { openDatabase } = await import('../apps/api/src/db');
-  const db = openDatabase(dataDir);
-  db.query('INSERT INTO workspace_groups(id,name,address,latitude,longitude,base_rate_cents,timezone,modeled,description,hours_json,attributes_json,access_instructions) VALUES(?,?,?,37.78157,-122.41898,500,\'America/Los_Angeles\',1,?,?,?,?)')
+  const db = await openDatabase(dataDir);
+  await db.query('INSERT INTO workspace_groups(id,name,address,latitude,longitude,base_rate_cents,timezone,modeled,description,hours_json,attributes_json,access_instructions) VALUES(?,?,?,37.78157,-122.41898,500,\'America/Los_Angeles\',1,?,?,?,?)')
     .run(fixtureGroup, 'Synthetic recovery fixture', 'Isolated test inventory, not a live property', 'Synthetic equivalent Office A/B acceptance inventory.', JSON.stringify({ open: '08:00', close: '20:00', days: [1, 2, 3, 4, 5, 6, 7], modeled: true }), JSON.stringify({ synthetic: true }), 'Synthetic test access instructions. No real door or property access is provided.');
-  for (const [id, name] of [[roomA, 'Office A'], [roomB, 'Office B']]) db.query('INSERT INTO offices(id,group_id,name,description,attributes_json,device_binding_json) VALUES(?,?,?,?,?,?)').run(id, fixtureGroup, name, 'Synthetic equivalent fixture: one desk, one-person capacity, same modeled rate.', JSON.stringify({ synthetic: true, equivalenceClass: '10am-recovery', capacity: 1, desk: true }), JSON.stringify({ mode: 'simulator' }));
+  for (const [id, name] of [[roomA, 'Office A'], [roomB, 'Office B']]) await db.query('INSERT INTO offices(id,group_id,name,description,attributes_json,device_binding_json) VALUES(?,?,?,?,?,?)').run(id, fixtureGroup, name, 'Synthetic equivalent fixture: one desk, one-person capacity, same modeled rate.', JSON.stringify({ synthetic: true, equivalenceClass: '10am-recovery', capacity: 1, desk: true }), JSON.stringify({ mode: 'simulator' }));
   const operatorEmail = `operator-${run}@example.test`;
   const operatorPassword = `Fixture!${crypto.randomUUID()}`;
   const operatorId = `scenario-operator-${run}`;
   const operatorHash = await Bun.password.hash(operatorPassword, { algorithm: 'argon2id', memoryCost: 65536, timeCost: 3 });
-  db.query('INSERT INTO users(id,email,password_hash,name,role,test_account,created_at) VALUES(?,?,?,?,\'operator\',1,?)').run(operatorId, operatorEmail, operatorHash, 'Scoped scenario operator', logicalNow);
-  db.query('INSERT INTO operator_scopes(user_id,group_id) VALUES(?,?)').run(operatorId, fixtureGroup);
+  await db.query('INSERT INTO users(id,email,password_hash,name,role,test_account,created_at) VALUES(?,?,?,?,\'operator\',1,?)').run(operatorId, operatorEmail, operatorHash, 'Scoped scenario operator', logicalNow);
+  await db.query('INSERT INTO operator_scopes(user_id,group_id) VALUES(?,?)').run(operatorId, fixtureGroup);
   writeFileSync(join(dataDir, 'fixture-accounts.json'), JSON.stringify({ operator: { email: operatorEmail, password: operatorPassword, scope: fixtureGroup } }, null, 2), { mode: 0o600 });
   const checks: string[] = [];
   const pass = (s: string) => { checks.push(s); console.log(`PASS ${s}`); };
@@ -163,7 +163,7 @@ export async function runScenario() {
       const booking = await runtime!.services.commerce.hold(user, quote.id);
       const confirmed = await runtime!.rooms.command(roomA, { id: `${booking.id}:synthetic-fixture-confirm`, type: 'confirm', bookingId: booking.id, now: logicalNow });
       assert.ok(confirmed.ok, confirmed.message);
-      db.query('UPDATE reservations SET status=\'confirmed\',payment_status=\'paid\',revision=revision+1,data=json_set(data,\'$.syntheticPaymentFixture\',1,\'$.fundingSource\',\'isolated acceptance bootstrap; no Stripe charge\') WHERE id=?').run(booking.id);
+      await db.query('UPDATE reservations SET status=\'confirmed\',payment_status=\'paid\',revision=revision+1,data=json_set(data,\'$.syntheticPaymentFixture\',1,\'$.fundingSource\',\'isolated acceptance bootstrap; no Stripe charge\') WHERE id=?').run(booking.id);
       return runtime!.services.commerce.get(user, booking.id);
     }
     const previousBooking = await bootstrap(previous.user!, at('08:00'), at('09:45'));
@@ -231,14 +231,14 @@ export async function runScenario() {
     assert.equal(firstOffer.roomId, roomB); assert.match(firstOffer.equivalence, /Synthetic/);
     const stateAtDeparture = (await operator.request(`/operator/rooms/${roomA}`)).state;
     assert.equal(stateAtDeparture.expectedReadyAt, at('10:05'));
-    const notificationRow = db.query('SELECT * FROM notifications WHERE id=? AND user_id=?').get(notification.notification.id, guest.user!.id) as any;
+    const notificationRow = await db.query('SELECT * FROM notifications WHERE id=? AND user_id=?').get(notification.notification.id, guest.user!.id) as any;
     assert.ok(notificationRow);
     const conversationId = JSON.parse(notificationRow.data).conversationId;
     const conversationMessages = await guest.request(`/conversations/${conversationId}/messages`);
     assert.ok(conversationMessages.messages.some((m: any) => m.offer?.id === firstOffer.id));
-    const relayRows = db.query('SELECT * FROM outbox WHERE event_json LIKE ? AND relay_message_id IS NOT NULL').all(`%${roomA}%`) as any[];
+    const relayRows = await db.query('SELECT * FROM outbox WHERE event_json LIKE ? AND relay_message_id IS NOT NULL').all(`%${roomA}%`) as any[];
     assert.ok(relayRows.some(o => JSON.parse(o.event_json).type === 'cleaning.requested'));
-    assert.ok(db.query('SELECT 1 FROM processed_messages WHERE worker=\'operations\' AND event_id IN (SELECT json_extract(event_json,\'$.id\') FROM outbox WHERE json_extract(event_json,\'$.type\')=\'cleaning.requested\') AND status=\'completed\'').get());
+    assert.ok(await db.query('SELECT 1 FROM processed_messages WHERE worker=\'operations\' AND event_id IN (SELECT json_extract(event_json,\'$.id\') FROM outbox WHERE json_extract(event_json,\'$.type\')=\'cleaning.requested\') AND status=\'completed\'').get());
     pass('9:55 fresh vacancy → native actor/outbox → actual Relay workers → observed clean with 10:05 configured ETA → persisted guest notification and concierge offer over SSE');
     const agentMessages = await waitFor('state-change conversation through real Relay handlers', async () => {
       const { messages } = await operator.request(`/operator/rooms/${roomA}/conversation`);
@@ -274,19 +274,19 @@ export async function runScenario() {
     assert.equal(actorB.intervals.find((i: any) => i.bookingId === booking.id).status, 'confirmed');
     pass('decline and natural offer expiry preserve Office A; explicit acceptance assigns real Office B inventory with unchanged public ID, interval, and amount');
 
-    await waitFor('readiness event business acknowledgments', () => {
-      const pending = db.query('SELECT count(*) AS n FROM outbox WHERE event_json LIKE ? AND status!=\'completed\'').get(`%${roomA}%`) as any; return pending.n === 0 || false;
+    await waitFor('readiness event business acknowledgments', async () => {
+      const pending = await db.query('SELECT count(*) AS n FROM outbox WHERE event_json LIKE ? AND status!=\'completed\'').get(`%${roomA}%`) as any; return pending.n === 0 || false;
     });
-    const duplicate = db.query('SELECT * FROM outbox WHERE target=\'concierge\' AND json_extract(event_json,\'$.type\')=\'room.readiness_delayed\' AND event_json LIKE ? ORDER BY created_at LIMIT 1').get(`%${roomA}%`) as any;
+    const duplicate = await db.query('SELECT * FROM outbox WHERE target=\'concierge\' AND json_extract(event_json,\'$.type\')=\'room.readiness_delayed\' AND event_json LIKE ? ORDER BY created_at LIMIT 1').get(`%${roomA}%`) as any;
     assert.ok(duplicate);
-    const beforeNotifications = (db.query('SELECT count(*) AS n FROM notifications WHERE user_id=? AND type=\'readiness_disruption\'').get(guest.user!.id) as any).n;
-    const beforePayments = (db.query('SELECT count(*) AS n FROM reservations WHERE checkout_session_id IS NOT NULL').get() as any).n;
+    const beforeNotifications = (await db.query('SELECT count(*) AS n FROM notifications WHERE user_id=? AND type=\'readiness_disruption\'').get(guest.user!.id) as any).n;
+    const beforePayments = (await db.query('SELECT count(*) AS n FROM reservations WHERE checkout_session_id IS NOT NULL').get() as any).n;
     const attempts = duplicate.attempts;
-    db.query('UPDATE outbox SET status=\'pending\',next_attempt_at=0 WHERE id=?').run(duplicate.id);
-    await waitFor('real Relay duplicate redelivery and business result', () => { const value = db.query('SELECT status,attempts FROM outbox WHERE id=?').get(duplicate.id) as any; return value.status === 'completed' && value.attempts > attempts || false; });
+    await db.query('UPDATE outbox SET status=\'pending\',next_attempt_at=0 WHERE id=?').run(duplicate.id);
+    await waitFor('real Relay duplicate redelivery and business result', async () => { const value = await db.query('SELECT status,attempts FROM outbox WHERE id=?').get(duplicate.id) as any; return value.status === 'completed' && value.attempts > attempts || false; });
     await guest.request(`/offers/${acceptedOffer.id}/accept`, {});
-    assert.equal((db.query('SELECT count(*) AS n FROM notifications WHERE user_id=? AND type=\'readiness_disruption\'').get(guest.user!.id) as any).n, beforeNotifications);
-    assert.equal((db.query('SELECT count(*) AS n FROM reservations WHERE checkout_session_id IS NOT NULL').get() as any).n, beforePayments);
+    assert.equal((await db.query('SELECT count(*) AS n FROM notifications WHERE user_id=? AND type=\'readiness_disruption\'').get(guest.user!.id) as any).n, beforeNotifications);
+    assert.equal((await db.query('SELECT count(*) AS n FROM reservations WHERE checkout_session_id IS NOT NULL').get() as any).n, beforePayments);
     pass('actual Relay duplicate redelivery and repeated acceptance do not duplicate guest disruption, swap, or payment');
 
     const savedIdentities = JSON.parse(readFileSync(join(dataDir, 'relay-identities.json'), 'utf8'));
@@ -319,8 +319,8 @@ export async function runScenario() {
     assert.equal(restartedActor.job.id, savedJob.id); assert.equal(restartedActor.job.status, 'started'); assert.equal(restartedActor.expectedReadyAt, at('10:05'));
     const restoredAgentMessages = (await operator.request(`/operator/rooms/${roomA}/conversation`)).messages;
     assert.ok(savedAgentMessages.every((saved: any) => restoredAgentMessages.some((item: any) => item.id === saved.id && item.body === saved.body)));
-    assert.equal((db.query('SELECT count(*) AS n FROM notifications WHERE user_id=? AND type=\'readiness_disruption\'').get(guest.user!.id) as any).n, beforeNotifications);
-    assert.equal((db.query('SELECT count(*) AS n FROM reservations WHERE checkout_session_id IS NOT NULL').get() as any).n, beforePayments);
+    assert.equal((await db.query('SELECT count(*) AS n FROM notifications WHERE user_id=? AND type=\'readiness_disruption\'').get(guest.user!.id) as any).n, beforeNotifications);
+    assert.equal((await db.query('SELECT count(*) AS n FROM reservations WHERE checkout_session_id IS NOT NULL').get() as any).n, beforePayments);
     pass('actual actor/API/device/Relay engine/workers restart preserves room job, real assignment, amount, durable sessions and Relay identities');
 
     const stoppedDemo = await operator.request(`/operator/rooms/${roomA}/demo`, { roboEnabled: false }, 'PATCH');
@@ -340,7 +340,7 @@ export async function runScenario() {
   } finally {
     guestStreamAbort?.abort();
     await stopStack();
-    runtime?.db.close(); db.close();
+    await runtime?.db.close(); await db.close();
     process.off('SIGINT', signal); process.off('SIGTERM', signal);
   }
 }

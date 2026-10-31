@@ -20,7 +20,8 @@
     "test:scenario": "bun scripts/scenario.ts",
     "actors:generate": "bun scripts/generate-actors.ts",
     "operator:create": "bun scripts/provision-operator.ts",
-    "operator:grant-control": "bun scripts/grant-device-control.ts"
+    "operator:grant-control": "bun scripts/grant-device-control.ts",
+    "db:migrate-sqlite": "bun scripts/migrate-sqlite.ts"
   },
   "dependencies": {
     "@agent-relay/sdk": "15.0.1",
