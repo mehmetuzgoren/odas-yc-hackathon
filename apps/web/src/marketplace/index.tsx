@@ -192,18 +192,18 @@ function Gallery({ photos, title }: { photos: string[]; title: string }) {
     }} onKeyDown={event => { if (count > 1 && event.key === 'ArrowLeft') step(-1); if (count > 1 && event.key === 'ArrowRight') step(1); }}>
       <div className={`grid h-[300px] grid-cols-1 gap-2 overflow-hidden rounded-2xl sm:h-[460px] ${others.length ? 'sm:grid-cols-3' : ''}`}>
         <div className={`relative overflow-hidden ${others.length ? 'sm:col-span-2' : ''}`}>
-          <button className="h-full w-full" onClick={() => setDialog(true)}><img key={photos[current]} src={photos[current]} alt={title} className="h-full w-full object-cover transition-opacity hover:opacity-95" /></button>
+          <button className="h-full w-full" onClick={() => setDialog(true)}><Photo key={photos[current]} src={photos[current]} alt={title} className="h-full w-full transition-opacity hover:opacity-95" /></button>
           {count > 1 && <span className="pointer-events-none absolute right-3 bottom-3 rounded-full bg-stone-900/60 px-2.5 py-1 text-xs font-medium text-white backdrop-blur">{current + 1} / {count}</span>}
         </div>
         <div className={`hidden gap-2 sm:grid ${others.length > 1 ? 'grid-rows-2' : 'grid-rows-1'}`}>
-          {others.slice(0, 2).map(photo => <button key={photo} onClick={() => setIndex(photos.indexOf(photo))} className="overflow-hidden"><img src={photo} alt="" className="h-full w-full object-cover transition-opacity hover:opacity-95" /></button>)}
+          {others.slice(0, 2).map(photo => <button key={photo} onClick={() => setIndex(photos.indexOf(photo))} className="overflow-hidden"><Photo src={photo} className="h-full w-full transition-opacity hover:opacity-95" /></button>)}
         </div>
       </div>
       {count > 1 && <><GalleryArrow side="left" show={edge === 'left'} onClick={() => step(-1)} /><GalleryArrow side="right" show={edge === 'right'} onClick={() => step(1)} /></>}
     </div>
     <button onClick={() => setDialog(true)} className="mt-3 text-sm font-medium text-stone-700 underline underline-offset-4">{count > 1 ? `Show all ${count} photos` : 'View photo'}</button>
     <Modal open={dialog} onClose={() => setDialog(false)} title={title} className="max-h-[90vh] max-w-4xl overflow-y-auto">
-      <div className="space-y-3">{photos.map(photo => <img key={photo} src={photo} alt="" className="w-full rounded-xl" />)}</div>
+      <div className="space-y-3">{photos.map(photo => <Photo key={photo} src={photo} alt={title} className="w-full rounded-xl" />)}</div>
     </Modal>
   </>;
 }

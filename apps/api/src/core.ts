@@ -28,7 +28,7 @@ export async function requireOperator(c: Context, rt: Runtime, roomId?: string):
   if (roomId) {
     const scope = rt.db.query('SELECT 1 FROM operator_scopes s JOIN offices o ON o.group_id=s.group_id WHERE s.user_id=? AND o.id=?').get(user.id, roomId);
     if (!scope) fail(403, 'This office is outside your assigned workspace.', 'forbidden');
-    if (user.testAccount && rt.config.deviceMode === 'physical') fail(403, 'Test accounts cannot control physical devices.', 'test_account');
+    if (user.testAccount && rt.config.deviceMode === 'physical' && !['GET', 'HEAD'].includes(c.req.method)) fail(403, 'Test accounts cannot control physical devices.', 'test_account');
   }
   return user;
 }

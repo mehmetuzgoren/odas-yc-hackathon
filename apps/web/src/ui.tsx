@@ -1,14 +1,15 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Temporal } from '@js-temporal/polyfill';
-import { Building2, ChevronLeft, ChevronRight, CircleAlert, LoaderCircle, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CircleAlert, LoaderCircle, X } from 'lucide-react';
 import { zonedNow } from './marketplace/time';
 
 export function Photo({ src, alt = '', className = '' }: { src?: string; alt?: string; className?: string }) {
-  const [failed, setFailed] = useState(false);
-  if (src && !failed) return <img src={src} alt={alt} loading="lazy" onError={() => setFailed(true)} className={`object-cover ${className}`} />;
-  return <div className={`flex flex-col items-center justify-center gap-2 bg-linen text-stone-400 ${className}`}>
-    <Building2 className="h-8 w-8" aria-hidden="true" /><span className="text-xs">Photos coming soon</span>
+  const [failedSource, setFailedSource] = useState<string>();
+  if (src && failedSource !== src) return <img src={src} alt={alt} loading="lazy" onError={() => setFailedSource(src)} className={`object-cover ${className}`} />;
+  return <div className={`relative overflow-hidden bg-linen ${className}`}>
+    <img src="/images/room-illustration.svg" alt={alt ? `${alt} (illustration; room photo unavailable)` : ''} loading="lazy" className="h-full w-full object-cover" />
+    <span className="absolute right-2 bottom-2 rounded-md bg-ivory/95 px-2 py-1 text-[11px] font-medium text-forest">Illustration</span>
   </div>;
 }
 

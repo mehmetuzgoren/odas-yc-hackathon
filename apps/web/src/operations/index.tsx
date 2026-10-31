@@ -444,7 +444,7 @@ function ListingForm({ detail, onChanged }: { detail: Detail; onChanged: () => P
     </div>
     <div>
       <p className="eyebrow mb-2">Photos ({office.photos.length}/8) — the first photo is the cover</p>
-      {office.photos.length ? <div className="flex flex-wrap gap-3">{office.photos.map((photo, index) => <div key={photo} className="relative h-24 w-32 overflow-hidden rounded-lg border border-stone-200"><img src={photo} alt="" className="h-full w-full object-cover" />{index === 0 && <span className="absolute top-1 left-1 rounded-[4px] bg-white/90 px-1.5 text-[10px] font-medium">Cover</span>}</div>)}</div> : <p className="text-sm text-stone-500">No verified photos for this room yet.</p>}
+      {office.photos.length ? <div className="flex flex-wrap gap-3">{office.photos.map((photo, index) => <div key={photo} className="relative h-24 w-32 overflow-hidden rounded-lg border border-stone-200"><Photo src={photo} className="h-full w-full" />{index === 0 && <span className="absolute top-1 left-1 rounded-[4px] bg-white/90 px-1.5 text-[10px] font-medium">Cover</span>}</div>)}</div> : <p className="text-sm text-stone-500">No verified photos for this room yet.</p>}
     </div>
     <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
       <Label text="Address (shown approximately)" className="md:col-span-2"><input disabled value={workspace.address} className={field} /></Label>
@@ -532,6 +532,7 @@ function Steps({ detail, state, demo }: { detail: Detail; state: RoomSnapshot; d
 }
 
 function Monitor({ id }: { id: string }) {
+  const { user } = useSession();
   const { detail, error, live, reload } = useRoomDetail(id);
   const [demo, setDemo] = useDemoStatus(id);
   const [busy, setBusy] = useState(false);
@@ -563,6 +564,7 @@ function Monitor({ id }: { id: string }) {
   const state = demo?.state ?? detail.state;
   const phase = phaseOf(state);
   const simulated = detail.deviceMode === 'simulator';
+  const readOnly = !simulated && user?.testAccount === true;
   const stale = !!demo?.camera.capturedAt && Date.now() - demo.camera.capturedAt > 10_000;
   const camera = demo ? (!demo.camera.connected ? 'disconnected' : stale ? 'stale' : 'connected') : state.inspection?.connection;
   return <div className="space-y-6">
@@ -578,10 +580,11 @@ function Monitor({ id }: { id: string }) {
         </div>
       </div>
       {demo && <div className="flex items-center gap-5">
-        <label className="flex items-center gap-2 text-sm font-medium">Monitor on<Switch label="Monitor on (Jev)" checked={demo.jevEnabled} disabled={busy} onChange={jevEnabled => void configure({ jevEnabled })} /></label>
-        <label className="flex items-center gap-2 text-sm font-medium">Auto clean<Switch label="Auto clean (Robo)" checked={demo.roboEnabled} disabled={busy} onChange={roboEnabled => void configure({ roboEnabled })} /></label>
+        <label className="flex items-center gap-2 text-sm font-medium">Monitor on<Switch label="Monitor on (Jev)" checked={demo.jevEnabled} disabled={busy || readOnly} onChange={jevEnabled => void configure({ jevEnabled })} /></label>
+        <label className="flex items-center gap-2 text-sm font-medium">Auto clean<Switch label="Auto clean (Robo)" checked={demo.roboEnabled} disabled={busy || readOnly} onChange={roboEnabled => void configure({ roboEnabled })} /></label>
       </div>}
     </header>
+    {readOnly && <p className="text-sm text-stone-600">View-only access. An authorized operator manages monitoring and cleaning.</p>}
     <section className={`rounded-2xl border p-5 ${phase.tone}`}>
       <p className="font-serif text-3xl font-semibold">{phase.label}</p>
       <p className="mt-1 text-sm">{phase.reason}</p>
@@ -590,9 +593,9 @@ function Monitor({ id }: { id: string }) {
       {demo?.vision.lastError && <p className="mt-1 text-sm font-medium text-red-700">{demo.vision.lastError}{demo.vision.retryAfterMs ? ` Retrying in ${Math.ceil(demo.vision.retryAfterMs / 1000)} s.` : ''}</p>}
       {dockNote && <p role="status" className="mt-1 text-sm font-medium text-red-700">{dockNote}</p>}
       <div className="mt-4 flex flex-wrap gap-2">
-        <button disabled={busy} onClick={() => void run('inspect', 'Inspection requested and recorded.')} className={primary}>Inspect room</button>
-        <button disabled={busy || state.operational !== 'available' || demo?.roboEnabled === false} title={demo?.roboEnabled === false ? 'Turn on Auto clean first' : undefined} onClick={() => void run('clean', 'Cleaning request recorded. Dispatch still requires actor authorization and observed vacancy.')} className={secondary}>Request vacuum clean</button>
-        <button disabled={busy} onClick={() => void run('dock', 'Dock request recorded. Check observed robot state for completion.')} className={secondary}>Return to dock</button>
+        <button disabled={busy || readOnly} onClick={() => void run('inspect', 'Inspection requested and recorded.')} className={primary}>Inspect room</button>
+        <button disabled={busy || readOnly || state.operational !== 'available' || demo?.roboEnabled === false} title={demo?.roboEnabled === false ? 'Turn on Auto clean first' : undefined} onClick={() => void run('clean', 'Cleaning request recorded. Dispatch still requires actor authorization and observed vacancy.')} className={secondary}>Request vacuum clean</button>
+        <button disabled={busy || readOnly} onClick={() => void run('dock', 'Dock request recorded. Check observed robot state for completion.')} className={secondary}>Return to dock</button>
       </div>
     </section>
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.25fr_1fr]">

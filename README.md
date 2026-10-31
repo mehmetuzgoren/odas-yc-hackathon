@@ -15,7 +15,7 @@ Open [http://127.0.0.1:5173](http://127.0.0.1:5173). One command starts the API,
 
 The seed contains 6 explicit workspace groups and 31 modeled offices. Configured 08:00 to 20:00 Pacific hours are test hours. Capacity, amenities, dimensions, access, and photography remain unknown. Only `polk-310-office-01` has an explicit simulator binding; no physical hardware is claimed for the other offices.
 
-Development guest and operator accounts use ordinary password login. Their generated credentials are in the ignored `.data/development/dev-accounts.json`, mode 0600. Set `DEV_GUEST_PASSWORD` and `DEV_OPERATOR_PASSWORD` before first seeding to choose them. Public signup always creates a guest. Test operator accounts cannot operate physical devices. Production startup does not seed development accounts.
+Development guest and operator accounts use ordinary password login. Their generated credentials are in the ignored `.data/development/dev-accounts.json`, mode 0600. Set `DEV_GUEST_PASSWORD` and `DEV_OPERATOR_PASSWORD` before first seeding to choose them. Public signup always creates a guest. Test operator accounts can view their assigned rooms and camera feeds; changing physical-device controls requires a physical-capable operator. Production startup does not seed development accounts.
 
 Provision an operator separately with `bun run operator:create --email operator@example.com --name "Office operator" --groups polk-310`. Supply `OPERATOR_PASSWORD` privately, or use the generated ignored credential file. Scope IDs are explicit. The account defaults to test permissions; `--allow-physical` explicitly permits physical device access after commissioning. Existing guest accounts are never silently promoted.
 
