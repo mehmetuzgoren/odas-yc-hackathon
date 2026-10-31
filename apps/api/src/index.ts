@@ -8,6 +8,7 @@ import { existsSync } from 'node:fs';
 import { loadConfig, createClock } from './config';
 import { openDatabase } from './db';
 import { HttpError, type Runtime } from './core';
+import { modelStatus } from './ai';
 
 export async function createApp() {
  const config=loadConfig();const db=openDatabase(config.dataDir);
@@ -32,7 +33,7 @@ export async function createApp() {
   if(!token||!expected||token.length!==expected.length||!timingSafeEqual(Buffer.from(token),Buffer.from(expected)))return c.json({error:'Refresh the page and try again.',code:'invalid_csrf'},403);
   return next();
  });
- app.get('/api/health',c=>c.json({ok:true,application:'ODAS',contractVersion:1,namespace:config.namespace,inventory:'modeled',devices:config.deviceMode,payments:config.stripeSecretKey?'stripe_sandbox':'unconfigured',concierge:process.env.CONCIERGE_MODE==='rules'||!process.env.OPENAI_API_KEY?'development_rules':'model'}));
+ app.get('/api/health',c=>c.json({ok:true,application:'ODAS',contractVersion:1,namespace:config.namespace,inventory:'modeled',devices:config.deviceMode,payments:config.stripeSecretKey?'stripe_sandbox':'unconfigured',concierge:modelStatus().mode,model:modelStatus().model}));
  app.route('/api',createCatalogRoutes(rt));app.route('/api',createCommerceRoutes(rt));app.route('/api',createOperationsRoutes(rt));app.route('/api',createConciergeRoutes(rt));
  app.all('/api/*',c=>c.json({error:'API route not found.'},404));
  const webRoot=resolve('apps/web/dist');

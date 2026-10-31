@@ -54,5 +54,8 @@ export function openDatabase(dataDir: string) {
    INSERT INTO swaps SELECT * FROM swaps_v1; DROP TABLE swaps_v1;`);
  })();
  db.exec('CREATE INDEX IF NOT EXISTS swaps_booking ON swaps(booking_id,created_at); INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(2,unixepoch()*1000);');
+ const conversationColumns = db.query('PRAGMA table_info(room_conversation)').all() as { name: string }[];
+ if (!conversationColumns.some(column => column.name === 'data')) db.exec("ALTER TABLE room_conversation ADD COLUMN data TEXT NOT NULL DEFAULT '{}'");
+ db.exec('INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(3,unixepoch()*1000);');
  return db;
 }

@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { eventSchema, type DomainEvent } from '@odas/contracts';
 import { audit, currentUser, fail, parseJSON, requireUser, type Runtime } from '../core';
 import { roleSchema } from '../../../../packages/concierge/src/protocol';
-import { conciergeMode } from './model';
+import { modelStatus } from '../ai';
 import { messageDto, notificationDto, type ConciergeFeatureService } from './service';
 
 const mutationSchema = z.object({ content: z.string().trim().min(1).max(4000), idempotencyKey: z.string().min(8).max(160) });
@@ -25,15 +25,15 @@ export function createConciergeRoutes(rt: Runtime) {
       const data = parseJSON<Record<string, unknown>>(row?.value, {});
       return { worker, connected: typeof data.at === 'number' && Date.now() - data.at < 15_000 && data.status === 'connected', lastSeenAt: data.at ?? null };
     });
-    return c.json({ mode: conciergeMode(), workers });
+    return c.json({ ...modelStatus(), workers });
   });
-  app.get('/conversations', async c => c.json({ conversations: svc().listConversations(await requireUser(c, rt)), mode: conciergeMode() }));
+  app.get('/conversations', async c => c.json({ conversations: svc().listConversations(await requireUser(c, rt)), ...modelStatus() }));
   app.post('/conversations', async c => {
     const user = await requireUser(c, rt);
     const body = z.object({ bookingId: z.string().min(1).optional() }).parse(await c.req.json());
     return c.json({ conversation: await svc().createConversation(user, body.bookingId) }, 201);
   });
-  app.get('/conversations/:id/messages', async c => c.json({ messages: svc().messages(await requireUser(c, rt), c.req.param('id')), mode: conciergeMode() }));
+  app.get('/conversations/:id/messages', async c => c.json({ messages: svc().messages(await requireUser(c, rt), c.req.param('id')), ...modelStatus() }));
   app.post('/conversations/:id/messages', async c => {
     const user = await requireUser(c, rt); const body = mutationSchema.parse(await c.req.json());
     return c.json({ message: svc().queueMessage(user, c.req.param('id'), body.content, body.idempotencyKey), status: 'queued' }, 202);

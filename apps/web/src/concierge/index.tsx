@@ -20,14 +20,15 @@ export function ConciergePanel({ bookingId }: { bookingId?: string } = {}) {
   const [conversations, setConversations] = useState<Conversation[]>([]); const [selected, setSelected] = useState<string | null>(null); const [messages, setMessages] = useState<Message[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]); const [content, setContent] = useState(''); const [busy, setBusy] = useState(false); const [loading, setLoading] = useState(false); const [error, setError] = useState('');
   const [mode, setMode] = useState('development_rules'); const [connected, setConnected] = useState(false); const [workersConnected, setWorkersConnected] = useState(true); const [actionBusy, setActionBusy] = useState<string | null>(null);
+  const [model, setModel] = useState<string | null>(null);
   const currentBookingId = bookingId ?? location.pathname.match(/^\/bookings\/([^/]+)$/)?.[1];
   const unread = notifications.filter(v => !v.readAt).length;
   const waiting = messages.length > 0 && messages.at(-1)?.role === 'user';
   const close = useCallback(() => { dialogRef.current?.close(); setOpen(false); triggerRef.current?.focus(); }, []);
   const show = useCallback(() => { setOpen(true); setTab('chat'); if (!dialogRef.current?.open) dialogRef.current?.showModal(); requestAnimationFrame(() => headingRef.current?.focus()); }, []);
   const loadMessages = useCallback(async (id: string) => {
-    const data = await api<{ messages: Message[]; mode: string }>(`/conversations/${encodeURIComponent(id)}/messages`);
-    if (selectedRef.current === id) { setMessages(data.messages); setMode(data.mode); }
+    const data = await api<{ messages: Message[]; mode: string; model: string | null }>(`/conversations/${encodeURIComponent(id)}/messages`);
+    if (selectedRef.current === id) { setMessages(data.messages); setMode(data.mode); setModel(data.model); }
   }, []);
   const chooseConversation = useCallback(async (id: string) => {
     selectedRef.current = id; setSelected(id); setLoading(true); setError('');
@@ -68,9 +69,9 @@ export function ConciergePanel({ bookingId }: { bookingId?: string } = {}) {
     try { autoSeen.current = new Set(JSON.parse(localStorage.getItem(`odas:concierge-seen:${user.id}`) ?? '[]')); } catch { autoSeen.current = new Set(); }
     async function initialize() {
       try {
-        const [chat, updates] = await Promise.all([api<{ conversations: Conversation[]; mode: string }>('/conversations'), api<{ notifications: Notification[] }>('/notifications')]);
+        const [chat, updates] = await Promise.all([api<{ conversations: Conversation[]; mode: string; model: string | null }>('/conversations'), api<{ notifications: Notification[] }>('/notifications')]);
         if (!active) return;
-        setConversations(chat.conversations); setMode(chat.mode); setNotifications(updates.notifications);
+        setConversations(chat.conversations); setMode(chat.mode); setModel(chat.model); setNotifications(updates.notifications);
         const saved = localStorage.getItem(`odas:conversation:${user!.id}`);
         if (saved && chat.conversations.some(v => v.id === saved)) await chooseConversation(saved);
         const unseen = updates.notifications.filter(v => v.openConcierge && !v.readAt && !autoSeen.current.has(v.id));
@@ -91,8 +92,8 @@ export function ConciergePanel({ bookingId }: { bookingId?: string } = {}) {
     void initialize();
     const timer = window.setInterval(async () => {
       try {
-        const status = await api<{ mode: string; workers: { connected: boolean }[] }>('/concierge/status');
-        if (active) { setMode(status.mode); setWorkersConnected(status.workers.every(v => v.connected)); }
+        const status = await api<{ mode: string; model: string | null; workers: { connected: boolean }[] }>('/concierge/status');
+        if (active) { setMode(status.mode); setModel(status.model); setWorkersConnected(status.workers.every(v => v.connected)); }
         if (selectedRef.current) await loadMessages(selectedRef.current);
       } catch { if (active) setWorkersConnected(false); }
     }, 10_000);
@@ -145,7 +146,7 @@ export function ConciergePanel({ bookingId }: { bookingId?: string } = {}) {
         <header className="concierge-header"><div><p className="eyebrow">Odas · here to help</p><h2 ref={headingRef} tabIndex={-1} id="concierge-title">Your concierge</h2></div><button className="concierge-icon" aria-label="Close concierge" onClick={close}><X size={22} /></button></header>
         <div className="concierge-tabs" role="tablist" aria-label="Concierge sections" onKeyDown={event => { if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return; event.preventDefault(); const next = event.key === 'Home' ? 'chat' : event.key === 'End' ? 'updates' : tab === 'chat' ? 'updates' : 'chat'; setTab(next); (event.currentTarget.querySelector(`#concierge-${next}-tab`) as HTMLButtonElement | null)?.focus(); }}><button role="tab" tabIndex={tab === 'chat' ? 0 : -1} aria-selected={tab === 'chat'} aria-controls="concierge-chat" id="concierge-chat-tab" onClick={() => setTab('chat')}><MessageCircle size={16} />Conversation</button><button role="tab" tabIndex={tab === 'updates' ? 0 : -1} aria-selected={tab === 'updates'} aria-controls="concierge-updates" id="concierge-updates-tab" onClick={() => setTab('updates')}><Bell size={16} />Updates {unread ? `(${unread})` : ''}</button></div>
         {!user ? <div className="concierge-signin"><h3>Keep the conversation going.</h3><p>Sign in to save your messages and receive reservation updates.</p><button className="button" onClick={() => { close(); setSignInOpen(true); }}>Sign in</button></div> : <>
-          <p className="concierge-status" aria-live="polite">{mode === 'development_rules' ? 'Development rules mode' : 'AI concierge'}<span>{connected ? 'Updates connected' : 'Reconnecting updates…'}</span></p>
+          <p className="concierge-status" aria-live="polite">{mode === 'development_rules' ? 'Development rules mode' : `OpenAI · ${model}`}<span>{connected ? 'Updates connected' : 'Reconnecting updates…'}</span></p>
           {!workersConnected && <p className="concierge-pipeline" role="status">The concierge worker is reconnecting. Your messages are saved and will resume when it returns.</p>}
           {error && <p className="error concierge-error" role="alert">{error}</p>}
           {tab === 'chat' ? <section id="concierge-chat" role="tabpanel" aria-labelledby="concierge-chat-tab" className="concierge-chat-panel">

@@ -8,7 +8,7 @@ export async function launch(development:boolean){
  const config=loadConfig();
  if(!development && (!process.env.TERSE_ACTOR_URL||/127\.0\.0\.1|localhost/.test(process.env.TERSE_ACTOR_URL)))throw new Error('Production requires the managed Terse actor URL and API key; local actor dev is not a production hosting path.');
  const root=resolve('.');const apiPort=String(config.apiPort);const relayPort=process.env.RELAY_PORT||'8787';
- Object.assign(process.env,{DATA_DIR:config.dataDir,DEVICE_PORT:process.env.DEVICE_PORT||'8090',API_PORT:apiPort,API_INTERNAL_URL:`http://127.0.0.1:${apiPort}`,API_BASE_URL:`http://127.0.0.1:${apiPort}`,ODAS_INTERNAL_TOKEN:config.internalToken,DEVICE_MODE:config.deviceMode,ODAS_NAMESPACE:config.namespace,RELAY_BASE_URL:process.env.RELAY_BASE_URL||process.env.RELAYCAST_BASE_URL||`http://127.0.0.1:${relayPort}`,CONCIERGE_MODE:process.env.CONCIERGE_MODE||'rules'});
+ Object.assign(process.env,{DATA_DIR:config.dataDir,DEVICE_PORT:process.env.DEVICE_PORT||'8090',API_PORT:apiPort,API_INTERNAL_URL:`http://127.0.0.1:${apiPort}`,API_BASE_URL:`http://127.0.0.1:${apiPort}`,ODAS_INTERNAL_TOKEN:config.internalToken,DEVICE_MODE:config.deviceMode,ODAS_NAMESPACE:config.namespace,RELAY_BASE_URL:process.env.RELAY_BASE_URL||process.env.RELAYCAST_BASE_URL||`http://127.0.0.1:${relayPort}`,CONCIERGE_MODE:process.env.CONCIERGE_MODE||(process.env.OPENAI_API_KEY?'model':'rules')});
  const children:{name:string;process:ReturnType<typeof Bun.spawn>}[]=[];
  const secrets=['TERSE_API_KEY','TERSE_ACTOR_SECRET','INTERNAL_TOKEN','STRIPE_SECRET_KEY','STRIPE_WEBHOOK_SECRET','MODEL_API_KEY','OPENAI_API_KEY'].map(k=>process.env[k]).filter(Boolean) as string[];
  let stopping=false;
