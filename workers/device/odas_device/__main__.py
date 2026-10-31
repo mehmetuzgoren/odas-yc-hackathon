@@ -257,7 +257,7 @@ class Worker:
         try:
             while True:
                 frame = camera.frame
-                if frame and frame.sequence != sequence and camera.connected:
+                if frame and frame.sequence != sequence and camera.connected and time.time() * 1000 - frame.captured_at <= 15000:
                     await response.write(b'--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ' + str(len(frame.jpeg)).encode() + b'\r\n\r\n' + frame.jpeg + b'\r\n')
                     sequence = frame.sequence
                 camera.changed.clear()

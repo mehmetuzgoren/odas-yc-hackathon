@@ -106,6 +106,18 @@ async def verify():
                     async with client.get(path + '/stream') as stream:
                         first = await asyncio.wait_for(stream.content.readuntil(b'\xff\xd9\r\n'), 2)
                         assert b'Content-Type: image/jpeg' in first
+                    robot_only = await configure({'roboEnabled': True})
+                    assert robot_only['jevEnabled'] is False
+                    await asyncio.sleep(0.8)
+                    robot_only_frames = await status()
+                    assert robot_only_frames['camera']['framesCaptured'] >= robot_only['camera']['framesCaptured'] + 2
+                    assert robot_only_frames['vision']['submitted'] == 0
+                    async with client.get(path + '/stream') as stream:
+                        for _ in range(2):
+                            assert b'Content-Type: image/jpeg' in await asyncio.wait_for(stream.content.readuntil(b'\xff\xd9\r\n'), 2)
+                    denied = await (await client.post(path + '/start', json={'commandId': 'no-jev-start'})).json()
+                    assert denied['accepted'] is False and worker.robot.starts == 0
+                    await configure({'roboEnabled': False})
                     denied = await (await client.post(path + '/start', json={'commandId': 'off-start'})).json()
                     assert denied['accepted'] is False and 'disabled' in denied['message']
 
@@ -126,7 +138,12 @@ async def verify():
                     await configure({'roboEnabled': True})
                     accepted = await (await client.post(path + '/start', json={'commandId': 'enabled-start'})).json()
                     assert accepted['accepted'] is True and worker.robot.starts == 1
-                    await configure({'roboEnabled': False})
+                    robo_off = await configure({'roboEnabled': False})
+                    await asyncio.sleep(0.8)
+                    still_checking = await status()
+                    assert still_checking['jevEnabled'] is True
+                    assert still_checking['vision']['submitted'] >= robo_off['vision']['submitted'] + 2
+                    assert still_checking['camera']['framesCaptured'] >= robo_off['camera']['framesCaptured'] + 2
                     denied = await (await client.post(path + '/start', json={'commandId': 'disabled-again'})).json()
                     assert denied['accepted'] is False and worker.robot.starts == 1
 
@@ -140,7 +157,41 @@ async def verify():
                     assert final['vision']['inFlight'] == 0
                     assert final['camera']['framesCaptured'] > disabled['camera']['framesCaptured']
                     assert final['jevEnabled'] is False and final['roboEnabled'] is False
-                    print(json.dumps({'ok': True, 'meanSubmissionIntervalMs': round(interval * 1000), 'concurrentInference': True, 'liveResults': count - 1, 'verified': ['four captures/submissions per second', 'preview with Jev off', 'off defaults', 'typed controls and private authentication', 'out-of-order response protection', 'late response cancellation', 'Robo command boundary']}))
+                    async with client.get(path + '/stream') as stream:
+                        for _ in range(2):
+                            assert b'Content-Type: image/jpeg' in await asyncio.wait_for(stream.content.readuntil(b'\xff\xd9\r\n'), 2)
+                    print(json.dumps({'ok': True, 'meanSubmissionIntervalMs': round(interval * 1000), 'concurrentInference': True, 'liveResults': count - 1, 'verified': ['four captures/submissions per second', 'camera and preview in all toggle combinations', 'Robo-off does not pause Jev', 'off defaults', 'typed controls and private authentication', 'out-of-order response protection', 'late response cancellation', 'Robo command boundary']}))
+                # A real decoder process that emits one JPEG then stalls must be replaced.
+                decoder = Path(directory) / 'stalled-decoder'
+                pids = Path(directory) / 'decoder-pids'
+                decoder.write_text('#!/usr/bin/env python3\nimport os,sys,time\nfrom pathlib import Path\n' + f'with Path({str(pids)!r}).open("a") as f: f.write(str(os.getpid())+"\\n")\n' + f'sys.stdout.buffer.write({output.getvalue()!r});sys.stdout.buffer.flush()\ntime.sleep(60)\n')
+                decoder.chmod(0o700)
+                bindings.write_text(json.dumps({'bindings': [{'roomId': 'fixture-lion', 'mode': 'physical', 'cameraId': 'fixture-camera'}], 'cameras': {'fixture-camera': {'urlEnv': 'FIXTURE_CAMERA_URL'}}}))
+                os.environ.update({'FFMPEG_BIN': str(decoder), 'FIXTURE_CAMERA_URL': 'rtsp://isolated-camera-fixture', 'DATA_DIR': str(Path(directory) / 'stall')})
+                stalled = device.Worker()
+                try:
+                    async with TestClient(TestServer(stalled.app()), headers={'Authorization': f'Bearer {token}'}) as stalled_client:
+                        deadline = time.monotonic() + 15
+                        recovered = None
+                        while time.monotonic() < deadline:
+                            recovered = await (await stalled_client.get('/v1/rooms/fixture-lion/demo')).json()
+                            if recovered['camera']['framesCaptured'] >= 2:
+                                break
+                            await asyncio.sleep(0.25)
+                        assert recovered['camera']['framesCaptured'] >= 2, 'A stalled decoder never reconnected'
+                        assert recovered['jevEnabled'] is False and recovered['roboEnabled'] is False
+                        assert recovered['vision']['submitted'] == 0
+                        async with stalled_client.get('/v1/rooms/fixture-lion/stream') as stream:
+                            assert b'Content-Type: image/jpeg' in await asyncio.wait_for(stream.content.readuntil(b'\xff\xd9\r\n'), 2)
+                    for pid in pids.read_text().splitlines():
+                        try:
+                            os.kill(int(pid), 0)
+                        except ProcessLookupError:
+                            continue
+                        raise AssertionError('Camera shutdown left an owned decoder running')
+                    print(json.dumps({'ok': True, 'verified': ['stalled RTSP decoder reconnects with both controls off', 'recovered stream delivers JPEGs', 'decoder processes are reaped on retry and shutdown']}))
+                finally:
+                    stalled.store.db.close()
             finally:
                 worker.store.db.close()
                 device.Vision, device.Q10Cloud = original_vision, original_robot
