@@ -1,0 +1,10 @@
+{
+  "ok": true,
+  "phases": [
+    "native actor inventory, safety, outbox and actual process restart persistence",
+    "commerce integration against native room actors; provider evidence is reported by that phase"
+  ],
+  "dataDir": "/Users/mehmetuzgoren/.codex/worktrees/odas-mvp/odas-hackathon-yc/.data/test-integration-JNbtzR",
+  "verifiedAt": "2026-10-31T18:51:56.309Z",
+  "note": "Physical devices are not exercised. A successful sandbox charge/refund is a separate provider verification."
+}

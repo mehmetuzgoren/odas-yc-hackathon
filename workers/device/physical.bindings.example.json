@@ -1,0 +1,8 @@
+{
+  "bindings": [
+    {"workspaceId": "polk-310", "roomId": "polk-310-office-01", "mode": "physical", "cameraId": "office-camera-1", "robotDuidEnv": "ROBOROCK_DEVICE_DUID", "note": "Example only. Confirm this exact room/device association before commissioning."}
+  ],
+  "cameras": {
+    "office-camera-1": {"kind": "rtsp", "urlEnv": "OFFICE_CAMERA_RTSP_URL"}
+  }
+}

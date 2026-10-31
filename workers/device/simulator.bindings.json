@@ -1,0 +1,6 @@
+{
+  "bindings": [
+    {"workspaceId": "polk-310", "roomId": "polk-310-office-01", "mode": "simulator", "note": "Explicit simulated device binding. No physical hardware association is claimed."}
+  ],
+  "cameras": {}
+}

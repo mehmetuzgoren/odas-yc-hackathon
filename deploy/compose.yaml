@@ -1,0 +1,36 @@
+services:
+  odas:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: ../.env
+    environment:
+      NODE_ENV: production
+      DATA_DIR: /data
+      API_HOST: 0.0.0.0
+      API_PORT: 3000
+      RELAY_NODE_BINARY: node
+    volumes:
+      - odas-data:/data
+    expose:
+      - "3000"
+    stop_grace_period: 15s
+  caddy:
+    image: caddy:2.10.2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      ODAS_DOMAIN: ${ODAS_DOMAIN:?Set ODAS_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - odas
+volumes:
+  odas-data:
+  caddy-data:
+  caddy-config:
