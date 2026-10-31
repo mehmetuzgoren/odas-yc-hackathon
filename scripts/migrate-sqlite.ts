@@ -1,5 +1,5 @@
 import { Database as SQLite } from 'bun:sqlite';
-import { mkdirSync } from 'node:fs';
+import { chmodSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { loadConfig } from '../apps/api/src/config';
 import { openDatabase } from '../apps/api/src/db';
@@ -12,8 +12,10 @@ export async function migrateSqlite(source: string) {
   const snapshotPath = resolve('.data/private', `odas-before-supabase-${Date.now()}.sqlite`);
   mkdirSync(dirname(snapshotPath), { recursive: true, mode: 0o700 });
   const original = new SQLite(sourcePath, { readonly: true });
-  try { await Bun.write(snapshotPath, original.serialize()); } finally { original.close(); }
-  const sqlite = new SQLite(snapshotPath, { readonly: true });
+  try { await Bun.write(snapshotPath, original.serialize()); chmodSync(snapshotPath, 0o600); } finally { original.close(); }
+  const sqlite = new SQLite(snapshotPath);
+  // Serialized WAL images need a writable open before they can become standalone backups.
+  sqlite.exec('PRAGMA journal_mode=DELETE;');
   const db = await openDatabase(config.dataDir);
   if (db.dialect !== 'postgres') throw new Error('Migration requires a PostgreSQL destination.');
   const counts: Record<string, number> = {};
@@ -67,7 +69,7 @@ export async function migrateSqlite(source: string) {
 }
 
 if (import.meta.main) {
-  const source = process.argv[2];
+  const source = process.argv.slice(2).find(argument => argument !== '--');
   if (!source) throw new Error('Usage: bun run db:migrate-sqlite -- /path/to/odas.sqlite');
   await migrateSqlite(source);
 }
