@@ -1,11 +1,11 @@
 import type { Context } from 'hono';
 import type { Database } from 'bun:sqlite';
 import { getCookie } from 'hono/cookie';
-import type { User, RoomGateway, SearchInput, SearchResult, Office, Workspace, Quote, Reservation, DomainEvent, ReplacementOffer, Notification, DeviceAdapter } from '@odas/contracts';
+import type { User, RoomGateway, SearchInput, SearchResult, Office, Workspace, Quote, Reservation, DomainEvent, ReplacementOffer, Notification, DeviceAdapter, BuildingDay } from '@odas/contracts';
 
 export interface Config { dataDir: string; origin: string; apiPort: number; internalToken: string; testMode: boolean; namespace: string; deviceMode: 'simulator' | 'physical'; stripeSecretKey?: string; stripeWebhookSecret?: string; [key: string]: unknown }
 export interface Clock { now(): number }
-export interface CatalogService { search(input: SearchInput): Promise<SearchResult>; group(id: string, input?: SearchInput): Promise<{ group: Workspace; offices: Office[] }>; office(id: string, input?: SearchInput): Promise<Office> }
+export interface CatalogService { availability(id: string, date: string): Promise<BuildingDay>; search(input: SearchInput): Promise<SearchResult>; group(id: string, input?: SearchInput): Promise<{ group: Workspace; offices: Office[] }>; office(id: string, input?: SearchInput): Promise<Office> }
 export interface CommerceService { quote(user: User, input: { roomId: string; startAt: number; endAt: number }): Promise<Quote>; hold(user: User, quoteId: string, idempotencyKey?: string): Promise<Reservation>; checkout(user: User, bookingId: string): Promise<{ url: string; reservation: Reservation }>; get(user: User, id: string): Promise<Reservation>; list(user: User): Promise<Reservation[]>; cancel(user: User, id: string, reason?: string): Promise<Reservation>; reconcile(user: User, id: string): Promise<Reservation>; checkIn(user: User, id: string): Promise<Reservation>; checkOut(user: User, id: string): Promise<Reservation>; offerReplacement(bookingId: string, event?: DomainEvent): Promise<ReplacementOffer | null>; acceptOffer(user: User, offerId: string): Promise<Reservation>; declineOffer(user: User, offerId: string): Promise<Reservation>; recover(): Promise<void>; [key: string]: unknown }
 export interface OperationsService { device: DeviceAdapter; inspect(roomId: string): Promise<unknown>; processEvent(event: DomainEvent): Promise<unknown>; drain(): Promise<void>; tick(): Promise<void>; [key: string]: unknown }
 export interface ConciergeService { notify(userId: string, input: Omit<Notification, 'id' | 'userId' | 'createdAt'>, idempotencyKey?: string): Notification; processEvent(event: DomainEvent): Promise<unknown>; [key: string]: unknown }

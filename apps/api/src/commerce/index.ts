@@ -62,7 +62,8 @@ export function createCommerceRoutes(rt: Runtime) {
       if (!/^[A-Za-z0-9_-]{32,128}$/.test(csrfToken)) csrfToken = random();
       setCookie(c, 'odas_csrf', csrfToken, { ...cookieOptions, httpOnly: false });
     }
-    return c.json({ user, csrfToken, cancellationPolicy: String(rt.config.cancellationPolicy || CANCELLATION_POLICY), paymentMode: 'sandbox', stripeConfigured: !!rt.config.stripeSecretKey });
+    const hostListings = user?.role === 'operator' ? (rt.db.query('SELECT COUNT(*) AS count FROM offices o JOIN operator_scopes s ON s.group_id=o.group_id WHERE s.user_id=?').get(user.id) as { count: number }).count : 0;
+    return c.json({ user, hostListings, csrfToken, cancellationPolicy: String(rt.config.cancellationPolicy || CANCELLATION_POLICY), paymentMode: 'sandbox', stripeConfigured: !!rt.config.stripeSecretKey });
   });
 
   app.post('/auth/signup', async c => {

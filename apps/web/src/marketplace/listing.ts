@@ -1,4 +1,4 @@
-import type { Office, Workspace } from '@odas/contracts';
+import { money, type Office, type Workspace } from '@odas/contracts';
 
 const BUILDINGS: Record<string, { street: string; suite: string; neighborhood: string }> = {
   'polk-310': { street: '507 Polk St', suite: 'Suite 310', neighborhood: 'Civic Center' },
@@ -23,6 +23,14 @@ export function roomTitle(group: { id: string; name: string }, name: string) {
   const { street, suite } = building(group);
   return [street, suite, roomName(name)].filter(Boolean).join(' · ');
 }
+
+export function buildingTitle(group: { id: string; name: string }) {
+  const { street, suite } = building(group);
+  return [street, suite].filter(Boolean).join(' · ');
+}
+
+// A plus only appears when another room exists that could cost more.
+export const fromPrice = (rateCents: number, roomCount: number) => `${money(rateCents)}${roomCount > 1 ? '+' : ''}`;
 
 export const roomPhotos = (office: Office) => office.photos.length ? office.photos : office.workspace?.photos ?? [];
 export const quoteTotal = (rateCents: number, minutes: number) => {

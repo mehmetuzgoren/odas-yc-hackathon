@@ -3,21 +3,21 @@ import { Link, useNavigate } from 'react-router-dom';
 import { divIcon, latLngBounds, type LatLngBounds } from 'leaflet';
 import { Circle, MapContainer, Marker, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 import { ImageOff, Search, X } from 'lucide-react';
-import { money } from '@odas/contracts';
 import { Photo } from '../ui';
+import { fromPrice } from './listing';
 import 'leaflet/dist/leaflet.css';
 
 const CENTER: [number, number] = [37.7749, -122.4194];
 const TILES = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
-export interface MapListing { id: string; latitude: number; longitude: number; rateCents: number; unavailable: boolean; street: string; suite: string; photo?: string; href: string }
+export interface MapListing { id: string; latitude: number; longitude: number; rateCents: number; roomCount: number; free: number; street: string; suite: string; photo?: string; href: string }
 
 function Viewport({ listings, fitKey, selectedId, view, onMoved, onMapClick }: { listings: MapListing[]; fitKey: number; selectedId: string | null; view: string; onMoved: (bounds: LatLngBounds) => void; onMapClick: () => void }) {
   const map = useMap();
   const programmatic = useRef(0);
   const mark = () => { programmatic.current = Date.now(); };
-  const fit = () => { if (listings.length) map.fitBounds(latLngBounds(listings.map(listing => [listing.latitude, listing.longitude])), { padding: [60, 60], maxZoom: 19 }); };
+  const fit = () => { if (listings.length) map.fitBounds(latLngBounds(listings.map(listing => [listing.latitude, listing.longitude])), { padding: [60, 60], maxZoom: 19, animate: false }); };
   useEffect(() => { if (fitKey) { mark(); fit(); } }, [fitKey, map]);
   useEffect(() => {
     const listing = listings.find(value => value.id === selectedId);
@@ -33,8 +33,9 @@ function Viewport({ listings, fitKey, selectedId, view, onMoved, onMapClick }: {
 
 function PricePin({ listing, active, onOpen, onLeave }: { listing: MapListing; active: boolean; onOpen: (select: boolean) => void; onLeave: () => void }) {
   const navigate = useNavigate();
-  const icon = useMemo(() => divIcon({ className: 'pin-wrap', iconSize: [0, 0], html: `<span class="price-pin ${active ? 'active' : ''} ${listing.unavailable ? 'unavailable' : ''}">${money(listing.rateCents)}</span>` }), [active, listing.rateCents, listing.unavailable]);
-  return <Marker position={[listing.latitude, listing.longitude]} icon={icon} zIndexOffset={active ? 1000 : 0} title={`${money(listing.rateCents)} per hour, ${listing.street}`} alt={`${money(listing.rateCents)} per hour, ${listing.street}`} eventHandlers={{
+  const price = fromPrice(listing.rateCents, listing.roomCount);
+  const icon = useMemo(() => divIcon({ className: 'pin-wrap', iconSize: [0, 0], html: `<span class="price-pin ${active ? 'active' : ''} ${listing.free ? '' : 'unavailable'}">${price}</span>` }), [active, price, listing.free]);
+  return <Marker position={[listing.latitude, listing.longitude]} icon={icon} zIndexOffset={active ? 1000 : 0} title={`${price} per hour, ${listing.street}`} alt={`${price} per hour, ${listing.street}`} eventHandlers={{
     click: () => onOpen(true), mouseover: () => onOpen(false), mouseout: onLeave,
     keypress: event => { if (event.originalEvent.key === 'Enter') void navigate(listing.href); },
   }} />;
@@ -45,10 +46,11 @@ function Preview({ listing, onClose, onEnter, onLeave }: { listing: MapListing; 
     {listing.photo ? <Photo src={listing.photo} className="h-28 w-full" /> : <div className="flex h-28 flex-col items-center justify-center gap-1 bg-stone-100 text-stone-500"><ImageOff className="h-5 w-5" aria-hidden="true" /><span className="text-xs font-medium">Surroundings image not yet verified</span></div>}
     <button onClick={onClose} aria-label="Close preview" className="absolute top-2 right-2 rounded-full bg-white/90 p-1.5 text-stone-700 shadow-sm hover:bg-white"><X className="h-4 w-4" /></button>
     <div className="space-y-1 p-4">
-      <p className="font-serif text-lg font-semibold text-stone-900">{money(listing.rateCents)}<span className="font-sans text-sm font-normal text-stone-500"> / hr</span></p>
+      <p className="font-serif text-lg font-semibold text-stone-900">{fromPrice(listing.rateCents, listing.roomCount)}<span className="font-sans text-sm font-normal text-stone-500"> / hr</span></p>
       <p className="text-sm font-medium text-stone-800">{listing.street}, San Francisco</p>
       {listing.suite && <p className="text-sm text-stone-600">{listing.suite}</p>}
-      <Link to={listing.href} className="mt-3 inline-flex rounded-full bg-forest px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-forest-dark">View listing</Link>
+      <p className="text-sm text-stone-600">{listing.free} of {listing.roomCount} room{listing.roomCount === 1 ? '' : 's'} free at your time</p>
+      <Link to={listing.href} className="mt-3 inline-flex rounded-full bg-forest px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-forest-dark">See rooms</Link>
     </div>
   </div>;
 }

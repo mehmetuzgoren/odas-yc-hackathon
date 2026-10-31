@@ -2,84 +2,67 @@ import { forwardRef, lazy, Suspense, useEffect, useMemo, useRef, useState, type 
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { LatLngBounds } from 'leaflet';
 import { Accessibility, ArrowLeft, ChevronLeft, ChevronRight, Clock, Coffee, DoorClosed, List, LoaderCircle, Map as MapIcon, Monitor, PenLine, Wifi, X } from 'lucide-react';
-import { CANCELLATION_POLICY, money, type Office, type Quote, type Reservation, type SearchResult, type Workspace } from '@odas/contracts';
+import { CANCELLATION_POLICY, money, type BuildingDay, type Office, type Quote, type Reservation, type SearchResult, type Workspace } from '@odas/contracts';
 import { api, useSession } from '../api';
 import { Calendar, EmptyState, ErrorState, Loading, Modal, Notice, Photo, Popover, Sheet } from '../ui';
 import { FiltersPopover, NO_FILTERS, SearchBar, type SearchValue } from './SearchBar';
-import { AMENITIES, ROOM_TYPES, bestOffice, building, filtersFrom, matchesFilters, matchesLocation, quoteTotal, roomName, roomPhotos, roomTitle, writeFilters, type Filters } from './listing';
+import { intervalOnly, useInterval, useRemote } from './hooks';
+import { AMENITIES, ROOM_TYPES, bestOffice, building, buildingTitle, filtersFrom, fromPrice, matchesFilters, matchesLocation, quoteTotal, roomPhotos, roomTitle, writeFilters, type Filters } from './listing';
 import { TimeColumn, type BusyBlock, type TimeBoard } from './TimeColumn';
-import { addDays, clockLabel, datedInstant, dateLabel, dayOfWeek, defaultSelection, durationLabel, intervalParams, rangeLabel, shortClock, toMinutes, toTime, zonedNow } from './time';
+import { addDays, clockLabel, datedInstant, dateLabel, dayOfWeek, durationLabel, rangeLabel, shortClock, toMinutes, toTime, zonedNow } from './time';
+
+export { BuildingPage } from './BuildingPage';
 
 const ExploreMap = lazy(() => import('./MapView'));
 const NeighborhoodMap = lazy(() => import('./MapView').then(module => ({ default: module.NeighborhoodMap })));
 const LAST_END = 1410;
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-function useRemote<T>(path: string | null) {
-  const [data, setData] = useState<T | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [retry, setRetry] = useState(0);
-  useEffect(() => {
-    let active = true;
-    setLoading(true); setError('');
-    if (!path) { setData(null); setLoading(false); return; }
-    api<T>(path).then(value => { if (active) setData(value); }).catch(error => { if (active) { setData(null); setError(error.message || 'Something went wrong. Please try again.'); } }).finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
-  }, [path, retry]);
-  return { data, loading, error, retry: () => setRetry(value => value + 1) };
-}
+interface Listing { group: Workspace; rooms: Office[]; cheapest: Office; free: number }
 
-function useInterval() {
-  const [params] = useSearchParams();
-  let query = new URLSearchParams(params); let error = '';
-  try { query = intervalParams(params); } catch (cause) { error = cause instanceof Error ? cause.message : 'Choose valid date and times.'; }
-  const fallback = defaultSelection();
-  return { query, error, selection: { date: query.get('date') || fallback.date, start: query.get('start') || fallback.start, end: query.get('end') || fallback.end } };
-}
-
-const intervalOnly = (query: URLSearchParams) => new URLSearchParams(['date', 'start', 'end', 'startAt', 'endAt'].flatMap(key => query.has(key) ? [[key, query.get(key)!]] : [])).toString();
-
-function Availability({ office, start, end }: { office: Office; start: number; end: number }) {
-  const open = !!office.available;
-  return <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${open ? 'text-forest' : 'text-stone-400'}`}>
-    <span className={`h-1.5 w-1.5 rounded-full ${open ? 'bg-forest' : 'bg-stone-300'}`} />
-    {open ? `Available ${clockLabel(start)}–${clockLabel(end)}` : `Unavailable · ${office.availabilityReason || 'not available'}`}
+function Availability({ listing, start, end }: { listing: Listing; start: number; end: number }) {
+  const { rooms, free, cheapest } = listing;
+  return <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${free ? 'text-forest' : 'text-stone-400'}`}>
+    <span className={`h-1.5 w-1.5 rounded-full ${free ? 'bg-forest' : 'bg-stone-300'}`} />
+    {free ? `${rooms.length === 1 ? 'Available' : `${free} of ${rooms.length} available`} ${clockLabel(start)}–${clockLabel(end)}` : `Unavailable · ${cheapest.availabilityReason || 'not available'}`}
   </span>;
 }
 
-interface CardProps { group: Workspace; office: Office; href: string; selected: boolean; index: number; start: number; end: number; onHover: (id: string) => void }
+interface CardProps { listing: Listing; href: string; selected: boolean; index: number; start: number; end: number; onHover: (id: string) => void }
 
-const ListingCard = forwardRef<HTMLAnchorElement, CardProps>(({ group, office, href, selected, index, start, end, onHover }, ref) => {
-  const title = roomTitle(group, office.name);
-  return <Link ref={ref} to={href} onMouseEnter={() => onHover(office.id)} onFocus={() => onHover(office.id)} style={{ animationDelay: `${50 * index}ms` }} className={`fade-up group block rounded-2xl p-2 transition-colors ${selected ? 'bg-mist ring-1 ring-forest/40' : 'hover:bg-white'}`}>
-    <div className="relative aspect-[4/3] overflow-hidden rounded-xl bg-stone-200"><Photo src={roomPhotos(office)[0]} alt={title} className="h-full w-full transition-transform duration-500 group-hover:scale-[1.03]" /></div>
+const BuildingCard = forwardRef<HTMLAnchorElement, CardProps>(({ listing, href, selected, index, start, end, onHover }, ref) => {
+  const { group, rooms, cheapest } = listing;
+  const title = buildingTitle(group);
+  const roomCount = group.officeCount ?? rooms.length;
+  return <Link ref={ref} to={href} onMouseEnter={() => onHover(group.id)} onFocus={() => onHover(group.id)} style={{ animationDelay: `${50 * index}ms` }} className={`fade-up group block rounded-2xl p-2 transition-colors ${selected ? 'bg-mist ring-1 ring-forest/40' : 'hover:bg-white'}`}>
+    <div className="relative aspect-[4/3] overflow-hidden rounded-xl bg-stone-200"><Photo src={group.photos[0] ?? roomPhotos(cheapest)[0]} alt={title} className="h-full w-full transition-transform duration-500 group-hover:scale-[1.03]" /></div>
     <div className="space-y-1 px-1 pt-3 pb-1">
       <div className="flex items-start justify-between gap-3">
         <h3 className="leading-snug font-semibold text-stone-900">{title}</h3>
-        <p className="text-sm whitespace-nowrap text-stone-900"><span className="font-semibold">{money(office.rateCents)}</span><span className="text-stone-500"> / hr</span></p>
+        <p className="text-sm whitespace-nowrap text-stone-900"><span className="font-semibold">{fromPrice(cheapest.rateCents, roomCount)}</span><span className="text-stone-500"> / hr</span></p>
       </div>
-      <p className="text-sm text-stone-500">{building(group).neighborhood} · {ROOM_TYPES.private_office}</p>
+      <p className="text-sm text-stone-500">{building(group).neighborhood} · Private offices</p>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-0.5">
-        <span className="inline-flex items-center gap-1 text-xs text-stone-600"><DoorClosed className="h-3.5 w-3.5" aria-hidden="true" /> Individual office</span>
-        <Availability office={office} start={start} end={end} />
+        <span className="inline-flex items-center gap-1 text-xs text-stone-600"><DoorClosed className="h-3.5 w-3.5" aria-hidden="true" /> {roomCount} room{roomCount === 1 ? '' : 's'}</span>
+        <Availability listing={listing} start={start} end={end} />
       </div>
     </div>
   </Link>;
 });
-ListingCard.displayName = 'ListingCard';
+BuildingCard.displayName = 'BuildingCard';
 
 function ListingsLoading() {
   return <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">{[0, 1, 2, 3].map(index => <div key={index} className="animate-pulse p-2"><div className="aspect-[4/3] rounded-xl bg-stone-200" /><div className="mt-3 h-4 w-2/3 rounded-[4px] bg-stone-200" /><div className="mt-2 h-3 w-1/2 rounded-[4px] bg-stone-200" /></div>)}</div>;
 }
 
-function MobilePreview({ group, office, href, onClose }: { group: Workspace; office: Office; href: string; onClose: () => void }) {
+function MobilePreview({ listing, href, onClose }: { listing: Listing; href: string; onClose: () => void }) {
+  const { group, rooms, cheapest } = listing;
   return <div className="absolute inset-x-3 bottom-20 z-[600] flex gap-3 rounded-2xl bg-white p-2 shadow-xl lg:hidden">
-    <Photo src={roomPhotos(office)[0]} className="h-20 w-24 rounded-xl" />
+    <Photo src={group.photos[0] ?? roomPhotos(cheapest)[0]} className="h-20 w-24 rounded-xl" />
     <Link to={href} className="min-w-0 flex-1 py-1">
-      <p className="truncate text-sm font-semibold">{roomTitle(group, office.name)}</p>
+      <p className="truncate text-sm font-semibold">{buildingTitle(group)}</p>
       <p className="text-xs text-stone-500">{building(group).neighborhood}</p>
-      <p className="mt-1 text-sm"><b>{money(office.rateCents)}</b> / hr</p>
+      <p className="mt-1 text-sm"><b>{fromPrice(cheapest.rateCents, group.officeCount ?? rooms.length)}</b> / hr</p>
     </Link>
     <button onClick={onClose} aria-label="Close" className="self-start p-1 text-stone-400"><X className="h-4 w-4" /></button>
   </div>;
@@ -104,18 +87,19 @@ export function ExplorePage() {
     return groups.flatMap(group => {
       if (!matchesLocation(group, applied.location)) return [];
       if (area && !area.contains([group.latitude, group.longitude])) return [];
-      const office = bestOffice(offices.filter(value => value.groupId === group.id && matchesFilters(value, filters)));
-      return office ? [{ group, office }] : [];
+      const rooms = offices.filter(value => value.groupId === group.id && matchesFilters(value, filters));
+      const cheapest = bestOffice(rooms);
+      return cheapest ? [{ group, rooms, cheapest, free: rooms.filter(room => room.available).length }] : [];
     });
   }, [result.data, filterKey, area]);
-  const ids = listings.map(listing => listing.office.id).join();
+  const ids = listings.map(listing => listing.group.id).join();
   useEffect(() => { if (!area) setFitKey(key => key + 1); }, [ids, area]);
   useEffect(() => setDraft(applied), [selection.date, selection.start, selection.end, applied.location]);
   const start = toMinutes(selection.start);
   const end = toMinutes(selection.end);
-  const href = (office: Office) => `/rooms/${office.id}?${query}`;
-  const mapListings = useMemo(() => listings.map(({ group, office }) => ({ id: office.id, latitude: group.latitude, longitude: group.longitude, rateCents: office.rateCents, unavailable: !office.available, street: building(group).street, suite: building(group).suite, photo: roomPhotos(office)[0], href: href(office) })), [listings, query.toString()]);
-  const active = listings.find(listing => listing.office.id === selected);
+  const href = (group: Workspace) => `/buildings/${group.id}?${query}`;
+  const mapListings = useMemo(() => listings.map(({ group, rooms, cheapest, free }) => ({ id: group.id, latitude: group.latitude, longitude: group.longitude, rateCents: cheapest.rateCents, roomCount: group.officeCount ?? rooms.length, free, street: building(group).street, suite: building(group).suite, photo: group.photos[0] ?? roomPhotos(cheapest)[0], href: href(group) })), [listings, query.toString()]);
+  const active = listings.find(listing => listing.group.id === selected);
   function search() {
     const next = new URLSearchParams(params);
     next.set('date', draft.date); next.set('start', draft.start); next.set('end', draft.end);
@@ -141,7 +125,7 @@ export function ExplorePage() {
       <section aria-label="Spaces" className={`w-full px-4 py-6 sm:px-6 lg:block lg:w-[56%] ${view === 'map' ? 'hidden' : 'block'}`}>
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-stone-600" aria-live="polite">
-            {result.loading ? 'Searching…' : `${listings.length} space${listings.length === 1 ? '' : 's'}`} · {dateLabel(selection.date)}, {clockLabel(start)}–{clockLabel(end)}
+            {result.loading ? 'Searching…' : `${listings.length} building${listings.length === 1 ? '' : 's'}`} · {dateLabel(selection.date)}, {clockLabel(start)}–{clockLabel(end)}
             {area && <button onClick={() => setArea(null)} className="ml-2 font-medium text-forest underline underline-offset-4">Clear map area</button>}
           </p>
           <FiltersPopover value={filters} onChange={setFilters} />
@@ -149,7 +133,7 @@ export function ExplorePage() {
         {intervalError || result.error ? <ErrorState message={intervalError || result.error} onRetry={intervalError ? undefined : result.retry} />
           : result.loading && !listings.length ? <ListingsLoading />
           : listings.length ? <div className={`grid grid-cols-1 gap-6 sm:grid-cols-2 ${result.loading ? 'opacity-60' : ''}`}>
-            {listings.map(({ group, office }, index) => <ListingCard key={office.id} ref={element => { cards.current[office.id] = element; }} group={group} office={office} href={href(office)} selected={office.id === selected} index={index} start={start} end={end} onHover={setSelected} />)}
+            {listings.map((listing, index) => <BuildingCard key={listing.group.id} ref={element => { cards.current[listing.group.id] = element; }} listing={listing} href={href(listing.group)} selected={listing.group.id === selected} index={index} start={start} end={end} onHover={setSelected} />)}
           </div>
           : <EmptyState title="No spaces match" text="Try another time, fewer filters or a wider map area." action={<button onClick={() => { setFilters(NO_FILTERS); setArea(null); }} className="rounded-full border border-stone-300 px-4 py-2 text-sm font-medium">Reset filters</button>} />}
         <p className="mt-10 text-xs text-stone-400">Modeled inventory. Property details and access are not verified as live supply.</p>
@@ -158,7 +142,7 @@ export function ExplorePage() {
         <Suspense fallback={<Loading label="Loading map…" />}>
           <ExploreMap listings={mapListings} selectedId={selected} fitKey={fitKey} view={view} onSearchArea={setArea} onSelect={id => { setSelected(id); cards.current[id]?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }} />
         </Suspense>
-        {view === 'map' && active && <MobilePreview group={active.group} office={active.office} href={href(active.office)} onClose={() => setSelected(null)} />}
+        {view === 'map' && active && <MobilePreview listing={active} href={href(active.group)} onClose={() => setSelected(null)} />}
       </aside>
     </div>
     <button onClick={toggleView} className="fixed bottom-6 left-1/2 z-[700] flex -translate-x-1/2 items-center gap-2 rounded-full bg-stone-900 px-5 py-3 text-sm font-semibold text-white shadow-xl lg:hidden">
@@ -224,7 +208,12 @@ function useBooking(office: Office, initial: Selection, synced: (selection: Sele
   const nowMinutes = date === today ? now.minutes : date < today ? 1440 : 0;
   const isClosed = (value: string) => !hours.days.includes(dayOfWeek(value));
   const closed = isClosed(date);
-  const busy = useMemo<BusyBlock[]>(() => [...(open > 0 ? [{ from: 0, to: open, kind: 'closed' as const }] : []), ...(close < 1440 ? [{ from: close, to: 1440, kind: 'closed' as const }] : [])], [open, close]);
+  const { data: day } = useRemote<BuildingDay>(`/catalog/groups/${encodeURIComponent(office.groupId)}/availability?date=${date}`);
+  const busy = useMemo<BusyBlock[]>(() => [
+    ...(open > 0 ? [{ from: 0, to: open, kind: 'closed' as const }] : []),
+    ...(close < 1440 ? [{ from: close, to: 1440, kind: 'closed' as const }] : []),
+    ...(day?.date === date ? day.rooms.find(room => room.roomId === office.id)?.busy ?? [] : []),
+  ], [open, close, day, date, office.id]);
   const selection = { date, start: toTime(start), end: toTime(end) };
   const checked = synced(selection);
   const written = useRef(`${initial.date}|${initial.start}|${initial.end}`);
@@ -355,20 +344,6 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 
 const AMENITY_ICONS: Record<string, ComponentType<{ className?: string }>> = { wifi: Wifi, monitor: Monitor, whiteboard: PenLine, coffee: Coffee, accessible: Accessibility };
 
-function MoreOffices({ office, query }: { office: Office; query: string }) {
-  const { data } = useRemote<{ group: Workspace; offices: Office[] }>(`/catalog/groups/${encodeURIComponent(office.groupId)}?${query}`);
-  const others = data?.offices.filter(value => value.id !== office.id) ?? [];
-  if (!others.length) return null;
-  return <Section title="More offices here">
-    <ul className="divide-y divide-stone-100">
-      {others.map(other => <li key={other.id}><Link to={`/rooms/${other.id}?${query}`} className="flex items-center justify-between gap-3 py-2.5 text-sm hover:underline">
-        <span className="font-medium text-stone-800">{roomName(other.name)}</span>
-        <span className="flex items-center gap-4 text-stone-600">{money(other.rateCents)} / hr<span className={`h-1.5 w-1.5 rounded-full ${other.available ? 'bg-forest' : 'bg-stone-300'}`} title={other.available ? 'Available' : 'Unavailable'} /></span>
-      </Link></li>)}
-    </ul>
-  </Section>;
-}
-
 function RoomDetail({ id }: { id: string }) {
   const { query, error: intervalError, selection } = useInterval();
   const [, setParams] = useSearchParams();
@@ -393,11 +368,10 @@ function Loaded({ office, query, initial, synced, apply }: { office: Office; que
   const hours = workspace.hours;
   const days = hours.days.length === 7 ? 'Every day' : hours.days.map(day => DAYS[day - 1]).join(', ');
   const amenities = Array.isArray(office.attributes.amenities) ? office.attributes.amenities.map(String).filter(value => value in AMENITIES) : [];
-  const interval = intervalOnly(new URLSearchParams(query));
   const backQuery = new URLSearchParams(query);
   backQuery.delete('startAt'); backQuery.delete('endAt');
   return <main className="mx-auto max-w-[1240px] px-4 pt-6 pb-24 sm:px-6">
-    <Link to={`/?${backQuery}`} className="mb-4 inline-flex items-center gap-1 text-sm text-stone-600 hover:text-stone-900"><ArrowLeft className="h-4 w-4" aria-hidden="true" /> All spaces</Link>
+    <Link to={`/buildings/${office.groupId}?${backQuery}`} className="mb-4 inline-flex items-center gap-1 text-sm text-stone-600 hover:text-stone-900"><ArrowLeft className="h-4 w-4" aria-hidden="true" /> All rooms at {place.street}</Link>
     <div className="mb-5 flex flex-wrap items-end justify-between gap-3 lg:mb-4">
       <div>
         <h1 className="mt-2 font-serif text-3xl font-semibold tracking-tight text-stone-900 sm:text-4xl">{roomTitle(workspace, office.name)}</h1>
@@ -418,7 +392,6 @@ function Loaded({ office, query, initial, synced, apply }: { office: Office; que
         <Section title="Cancellation policy">
           <ul className="space-y-2 text-stone-600">{CANCELLATION_POLICY.split(/(?<=\.)\s+/).map(line => <li key={line} className="flex gap-3"><span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-stone-400" />{line}</li>)}</ul>
         </Section>
-        <MoreOffices office={office} query={interval} />
         <Section title="Neighborhood">
           <p className="mb-4 text-sm text-stone-600">{workspace.address}, San Francisco, CA — approximate area shown.</p>
           <Suspense fallback={<Loading label="Loading map…" />}><NeighborhoodMap latitude={workspace.latitude} longitude={workspace.longitude} /></Suspense>

@@ -3,7 +3,7 @@ import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate, usePa
 import { LogOut } from 'lucide-react';
 import { api, useSession } from './api';
 import { AuthPage, SignInDialog } from './auth';
-import { ExplorePage, RoomPage } from './marketplace';
+import { BuildingPage, ExplorePage, RoomPage } from './marketplace';
 import { BookingsPage, BookingPage } from './commerce';
 import { HostPage, ListingEditorPage, RoomMonitorPage } from './operations';
 import { ConciergePanel } from './concierge';
@@ -47,10 +47,10 @@ function UserMenu() {
 }
 
 function Header() {
-  const { user, loading, setSignInOpen } = useSession();
+  const { user, isHost, loading, setSignInOpen } = useSession();
   const { pathname, search } = useLocation();
-  const exploreSearch = pathname === '/' || pathname.startsWith('/rooms/') ? search : '';
-  const nav = [{ to: `/${exploreSearch}`, label: 'Explore', end: true }, { to: '/bookings', label: 'My bookings' }, { to: '/host', label: 'Host dashboard' }];
+  const exploreSearch = pathname === '/' || pathname.startsWith('/rooms/') || pathname.startsWith('/buildings/') ? search : '';
+  const nav = [{ to: `/${exploreSearch}`, label: 'Explore', end: true }, { to: '/bookings', label: 'My bookings' }, ...(isHost ? [{ to: '/host', label: 'Host dashboard' }] : [])];
   return <header className="sticky top-0 z-[1000] border-b border-stone-200 bg-ivory/90 backdrop-blur-md">
     <div className="mx-auto flex h-16 max-w-[1600px] items-center justify-between gap-4 px-4 sm:px-6">
       <Link to={`/${exploreSearch}`} aria-label="Odas home" className="font-serif text-[28px] font-semibold tracking-tight text-stone-900">Odas</Link>
@@ -82,6 +82,7 @@ export default function App() {
       <RouteFocus />
       <Routes>
         <Route path="/" element={<ExplorePage />} />
+        <Route path="/buildings/:id" element={<BuildingPage />} />
         <Route path="/rooms/:id" element={<RoomPage />} />
         <Route path="/bookings" element={<BookingsPage />} />
         <Route path="/bookings/:id" element={<BookingPage />} />
@@ -93,7 +94,7 @@ export default function App() {
         <Route path="/login" element={<AuthPage />} />
         <Route path="/signup" element={<AuthPage />} />
         <Route path="/offices/:id" element={<Redirect to={id => `/rooms/${id}`} />} />
-        <Route path="/workspaces/:id" element={<Redirect to={() => '/'} />} />
+        <Route path="/workspaces/:id" element={<Redirect to={id => `/buildings/${id}`} />} />
         <Route path="/reservations" element={<Navigate replace to="/bookings" />} />
         <Route path="/reservations/:id" element={<Redirect to={id => `/bookings/${id}`} />} />
         <Route path="/operator/*" element={<Navigate replace to="/host" />} />
