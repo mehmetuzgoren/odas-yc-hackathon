@@ -3,6 +3,7 @@ import { loadConfig } from '../apps/api/src/config';
 import { writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Database } from 'bun:sqlite';
+import { officeCatalog } from './office-catalog';
 
 export const inventory = [
  ['polk-310','507 Polk St, Suite 310','507 Polk St, Suite 310',9,357,37.78157,-122.41898],
@@ -12,24 +13,26 @@ export const inventory = [
  ['post-204','2211 Post St, Suite 204','2211 Post St, Suite 204',3,650,37.78441,-122.43829],
  ['market-870-1242','870 Market St, Suite 1242','870 Market St, Suite 1242',3,730,37.78511,-122.40722],
 ] as const;
-const polkRoomNames = ['Lion', 'Butterfly', 'Fox', 'Otter', 'Owl', 'Dolphin', 'Panda', 'Falcon', 'Deer'] as const;
 export async function seed(db:Database, dataDir:string, devAccounts=false) {
  const now=Date.now();
  db.transaction(()=>{
   for (const [id,name,address,count,rate,lat,lng] of inventory) {
-   db.query('INSERT OR IGNORE INTO workspace_groups(id,name,address,latitude,longitude,base_rate_cents,timezone,modeled,description,hours_json,photos_json,attributes_json,access_instructions) VALUES(?,?,?,?,?,?,?,1,?,?,?,?,?)').run(id,name,address,lat,lng,rate,'America/Los_Angeles',`Modeled workspace group with ${count} separately bookable offices. Property details and access are unverified.`,JSON.stringify({open:'08:00',close:'20:00',days:[1,2,3,4,5,6,7],modeled:true}),'[]','{}',null);
+   const media = officeCatalog[id];
+   const buildingPhotos = JSON.stringify(media.photos);
+   db.query('INSERT OR IGNORE INTO workspace_groups(id,name,address,latitude,longitude,base_rate_cents,timezone,modeled,description,hours_json,photos_json,attributes_json,access_instructions) VALUES(?,?,?,?,?,?,?,1,?,?,?,?,?)').run(id,name,address,lat,lng,rate,'America/Los_Angeles',`Modeled workspace group with ${count} separately bookable offices. Property details and access are unverified.`,JSON.stringify({open:'08:00',close:'20:00',days:[1,2,3,4,5,6,7],modeled:true}),buildingPhotos,'{}',null);
+   db.query("UPDATE workspace_groups SET photos_json=? WHERE id=? AND photos_json='[]'").run(buildingPhotos,id);
    for(let i=1;i<=count;i++) {
     const number = String(i).padStart(2,'0');
     const officeId = `${id}-office-${number}`;
     const defaultName = `Office ${number}`;
     const defaultDescription = `Separately bookable modeled office ${number}. Capacity, dimensions, and amenities are not verified.`;
-    const roomName = id === 'polk-310' ? polkRoomNames[i - 1] : defaultName;
-    const description = id === 'polk-310' ? `${roomName} is a separately bookable modeled office. Capacity, dimensions, and amenities are not verified.` : defaultDescription;
-    db.query('INSERT OR IGNORE INTO offices(id,group_id,name,description,rate_cents,modeled,photos_json,attributes_json,device_binding_json) VALUES(?,?,?,?,NULL,1,?,?,?)').run(officeId,id,roomName,description,'[]','{}',i===1 && id==='polk-310'?JSON.stringify({mode:'simulator',label:'Development simulator, no physical hardware'}):null);
-    if (id === 'polk-310') {
-     db.query('UPDATE offices SET name=? WHERE id=? AND name=?').run(roomName,officeId,defaultName);
-     db.query('UPDATE offices SET description=? WHERE id=? AND description=?').run(description,officeId,defaultDescription);
-    }
+    const roomName = media.names[i - 1];
+    const description = `${roomName} is a separately bookable modeled office. Capacity, dimensions, and amenities are not verified.`;
+    const photos = JSON.stringify(i === 1 ? media.photos : [`/img/listings/generated/${id}-${roomName.toLowerCase()}.png`]);
+    db.query('INSERT OR IGNORE INTO offices(id,group_id,name,description,rate_cents,modeled,photos_json,attributes_json,device_binding_json) VALUES(?,?,?,?,NULL,1,?,?,?)').run(officeId,id,roomName,description,photos,'{}',i===1 && id==='polk-310'?JSON.stringify({mode:'simulator',label:'Development simulator, no physical hardware'}):null);
+    db.query('UPDATE offices SET name=? WHERE id=? AND name=?').run(roomName,officeId,defaultName);
+    db.query('UPDATE offices SET description=? WHERE id=? AND description=?').run(description,officeId,defaultDescription);
+    db.query("UPDATE offices SET photos_json=? WHERE id=? AND photos_json='[]'").run(photos,officeId);
    }
   }
  })();
