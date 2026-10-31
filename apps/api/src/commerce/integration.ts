@@ -8,6 +8,8 @@ import { openDatabase } from '../db';
 import { loadConfig } from '../config';
 import { HttpError, type Runtime } from '../core';
 import { createRoomGateway } from '../operations/gateway';
+import { createOperationsService } from '../operations/service';
+import { createOperationsRoutes } from '../operations';
 import { createCatalogService } from '../catalog/service';
 import { createCommerceService } from './service';
 import { createCommerceRoutes } from './index';
@@ -35,7 +37,9 @@ export async function runCommerceIntegration() {
   for (const id of [roomA, roomB]) db.query('INSERT INTO offices(id,group_id,name,description,attributes_json) VALUES(?,?,?,?,?)').run(id, group, id === roomA ? 'Office A' : 'Office B', 'Synthetic equivalent fixture.', JSON.stringify({ synthetic: true, equivalenceClass: 'commerce-fixture', capacity: 1, desk: true }));
   const app = new Hono();
   app.route('/api', createCommerceRoutes(rt));
-  app.onError((e, c) => c.json({ error: e.message }, (e instanceof HttpError ? e.status : 500) as any));
+  rt.services.operations = createOperationsService(rt);
+  app.route('/api', createOperationsRoutes(rt));
+  app.onError((e, c) => c.json({ error: e.message, ...(e instanceof HttpError && e.code ? { code: e.code } : {}) }, (e instanceof HttpError ? e.status : 500) as any));
   const checks: string[] = [];
   const pass = (text: string) => { checks.push(text); console.log(`PASS ${text}`); };
   const tomorrow = Temporal.Instant.fromEpochMilliseconds(now).toZonedDateTimeISO('America/Los_Angeles').toPlainDate().add({ days: 1 }).toString();
@@ -171,6 +175,39 @@ export async function runCommerceIntegration() {
   assert.equal((await commerce.get(auth.user, expiryHold.id)).status, 'expired');
   assert.equal((await rt.rooms.snapshot(thirdRoom)).intervals.find(i => i.bookingId === expiryHold.id)?.status, 'canceled');
   pass('controlled-clock hold expiry and persisted workflow recovery in isolated actor namespace');
+  const hostId = `host-view-${run}`;
+  const hostEmail = `host-view-${run}@example.test`;
+  db.query("INSERT INTO users(id,email,password_hash,name,role,test_account,created_at) VALUES(?,?,?,?,'operator',1,?)").run(hostId, hostEmail, stored.password_hash, 'Host viewing fixture', now);
+  const hostLogin = await app.request('http://localhost/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: hostEmail, password }) });
+  assert.equal(hostLogin.status, 200);
+  const hostCookies = hostLogin.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
+  const originalMode = config.deviceMode;
+  const originalDeviceUrl = config.deviceUrl;
+  let deviceMutations = 0;
+  const deviceFixture = Bun.serve({ port: 0, hostname: '127.0.0.1', fetch(request) {
+    if (request.method !== 'GET') deviceMutations++;
+    return new URL(request.url).pathname.endsWith('/frame')
+      ? new Response('private-camera-fixture')
+      : Response.json({ jevEnabled: false, roboEnabled: false, mode: 'physical' });
+  } });
+  config.deviceMode = 'physical'; config.deviceUrl = `http://127.0.0.1:${deviceFixture.port}`;
+  try {
+    const view = (path: string, cookie = hostCookies) => app.request(`http://localhost/api/operator/rooms/${roomA}${path}`, { headers: { Cookie: cookie } });
+    assert.equal((await view('')).status, 403);
+    db.query('INSERT INTO operator_scopes(user_id,group_id) VALUES(?,?)').run(hostId, group);
+    for (const path of ['', '/demo', '/frame']) assert.equal((await view(path)).status, 200);
+    assert.equal((await view('/frame', '')).status, 401);
+    assert.equal((await view('/frame', cookies)).status, 403);
+    for (const [path, method] of [['/demo', 'PATCH'], ['/clean', 'POST'], ['/inspect', 'POST'], ['/dock', 'POST']]) {
+      const response = await app.request(`http://localhost/api/operator/rooms/${roomA}${path}`, { method, headers: { Cookie: hostCookies, 'Content-Type': 'application/json' }, body: JSON.stringify({ jevEnabled: true }) });
+      assert.equal(response.status, 403);
+      assert.equal((await response.json() as any).code, 'test_account');
+    }
+    assert.equal(deviceMutations, 0);
+    pass('assigned test hosts can view physical room details, demo status and camera frames; guests and device-control mutations remain blocked');
+  } finally {
+    config.deviceMode = originalMode; config.deviceUrl = originalDeviceUrl; deviceFixture.stop(true);
+  }
   db.close();
   console.log(JSON.stringify({ checks: checks.length, dataDir: config.dataDir, actorUrl: process.env.TERSE_ACTOR_URL, paymentEvidence: config.stripeSecretKey ? 'real sandbox Checkout and expiration; successful payment/refund not exercised here' : 'not configured' }));
   return checks;
