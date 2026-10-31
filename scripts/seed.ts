@@ -12,12 +12,25 @@ export const inventory = [
  ['post-204','2211 Post St, Suite 204','2211 Post St, Suite 204',3,650,37.78441,-122.43829],
  ['market-870-1242','870 Market St, Suite 1242','870 Market St, Suite 1242',3,730,37.78511,-122.40722],
 ] as const;
+const polkRoomNames = ['Lion', 'Butterfly', 'Fox', 'Otter', 'Owl', 'Dolphin', 'Panda', 'Falcon', 'Deer'] as const;
 export async function seed(db:Database, dataDir:string, devAccounts=false) {
  const now=Date.now();
  db.transaction(()=>{
   for (const [id,name,address,count,rate,lat,lng] of inventory) {
    db.query('INSERT OR IGNORE INTO workspace_groups(id,name,address,latitude,longitude,base_rate_cents,timezone,modeled,description,hours_json,photos_json,attributes_json,access_instructions) VALUES(?,?,?,?,?,?,?,1,?,?,?,?,?)').run(id,name,address,lat,lng,rate,'America/Los_Angeles',`Modeled workspace group with ${count} separately bookable offices. Property details and access are unverified.`,JSON.stringify({open:'08:00',close:'20:00',days:[1,2,3,4,5,6,7],modeled:true}),'[]','{}',null);
-   for(let i=1;i<=count;i++) db.query('INSERT OR IGNORE INTO offices(id,group_id,name,description,rate_cents,modeled,photos_json,attributes_json,device_binding_json) VALUES(?,?,?,?,NULL,1,?,?,?)').run(`${id}-office-${String(i).padStart(2,'0')}`,id,`Office ${String(i).padStart(2,'0')}`,`Separately bookable modeled office ${String(i).padStart(2,'0')}. Capacity, dimensions, and amenities are not verified.`,'[]','{}',i===1 && id==='polk-310'?JSON.stringify({mode:'simulator',label:'Development simulator, no physical hardware'}):null);
+   for(let i=1;i<=count;i++) {
+    const number = String(i).padStart(2,'0');
+    const officeId = `${id}-office-${number}`;
+    const defaultName = `Office ${number}`;
+    const defaultDescription = `Separately bookable modeled office ${number}. Capacity, dimensions, and amenities are not verified.`;
+    const roomName = id === 'polk-310' ? polkRoomNames[i - 1] : defaultName;
+    const description = id === 'polk-310' ? `${roomName} is a separately bookable modeled office. Capacity, dimensions, and amenities are not verified.` : defaultDescription;
+    db.query('INSERT OR IGNORE INTO offices(id,group_id,name,description,rate_cents,modeled,photos_json,attributes_json,device_binding_json) VALUES(?,?,?,?,NULL,1,?,?,?)').run(officeId,id,roomName,description,'[]','{}',i===1 && id==='polk-310'?JSON.stringify({mode:'simulator',label:'Development simulator, no physical hardware'}):null);
+    if (id === 'polk-310') {
+     db.query('UPDATE offices SET name=? WHERE id=? AND name=?').run(roomName,officeId,defaultName);
+     db.query('UPDATE offices SET description=? WHERE id=? AND description=?').run(description,officeId,defaultDescription);
+    }
+   }
   }
  })();
  if(devAccounts){
