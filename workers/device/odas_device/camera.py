@@ -3,6 +3,7 @@ import asyncio
 import os
 import time
 from dataclasses import dataclass
+from typing import Callable
 from urllib.parse import urlparse
 from aiohttp import ClientSession
 from .storage import Store
@@ -15,7 +16,7 @@ class Frame:
 
 class Camera:
     """One persistent FFmpeg decoder per camera; only the latest frame is retained."""
-    def __init__(self, camera_id: str, config: dict, store: Store, session: ClientSession):
+    def __init__(self, camera_id: str, config: dict, store: Store, session: ClientSession, on_frame: Callable[[Frame], None] | None = None):
         self.id = camera_id
         self.config = config
         self.store = store
@@ -24,6 +25,9 @@ class Camera:
         self.task: asyncio.Task | None = None
         self.process: asyncio.subprocess.Process | None = None
         self.connected = False
+        self.on_frame = on_frame
+        self.changed = asyncio.Event()
+        self.frames_captured = 0
 
     def start(self) -> None:
         self.task = asyncio.create_task(self._run())
@@ -35,19 +39,20 @@ class Camera:
         while True:
             try:
                 if self.config.get('kind') == 'http_jpeg':
+                    started = time.monotonic()
                     async with self.session.get(url, timeout=8) as response:
                         response.raise_for_status()
                         jpeg = await response.read()
                         if not jpeg.startswith(b'\xff\xd8') or len(jpeg) > 5_000_000:
                             raise ValueError('Invalid JPEG')
                         self._capture(jpeg)
-                    await asyncio.sleep(2)
+                    await asyncio.sleep(max(0, 0.25 - (time.monotonic() - started)))
                     continue
                 if urlparse(url).scheme not in ('rtsp', 'rtsps'):
                     raise ValueError('RTSP camera URL required')
                 self.process = await asyncio.create_subprocess_exec(
                     os.environ.get('FFMPEG_BIN', 'ffmpeg'), '-hide_banner', '-loglevel', 'error',
-                    '-rtsp_transport', 'tcp', '-i', url, '-an', '-vf', 'fps=1,scale=960:-1',
+                    '-rtsp_transport', 'tcp', '-i', url, '-an', '-vf', 'fps=4,scale=960:-1',
                     '-f', 'image2pipe', '-vcodec', 'mjpeg', '-q:v', '4', 'pipe:1',
                     stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
                 )
@@ -75,6 +80,10 @@ class Camera:
     def _capture(self, jpeg: bytes) -> None:
         self.frame = Frame(jpeg, int(time.time() * 1000), self.store.sequence(self.id))
         self.connected = True
+        self.frames_captured += 1
+        self.changed.set()
+        if self.on_frame:
+            self.on_frame(self.frame)
 
     async def close(self) -> None:
         if self.task:

@@ -147,6 +147,12 @@ export async function runScenario() {
     await guest.request('/auth/signup', { name: 'Arriving fixture guest', email: `arriving-${run}@example.test`, password: `Fixture!${crypto.randomUUID()}` });
     await previous.request('/auth/signup', { name: 'Previous fixture guest', email: `previous-${run}@example.test`, password: `Fixture!${crypto.randomUUID()}` });
     await operator.request('/auth/login', { email: operatorEmail, password: operatorPassword });
+    for (const roomId of [roomA, roomB]) {
+      const initialControls = await operator.request(`/operator/rooms/${roomId}/demo`);
+      assert.equal(initialControls.jevEnabled, false); assert.equal(initialControls.roboEnabled, false);
+      await assert.rejects(operator.request(`/operator/rooms/${roomId}/clean`, {}), (e: any) => e.status === 409 && e.code === 'robo_disabled');
+      await operator.request(`/operator/rooms/${roomId}/demo`, { roboEnabled: true }, 'PATCH');
+    }
     await waitFor('both independently running Relay workers', async () => {
       const status = await guest.request('/concierge/status'); return status.workers.every((w: any) => w.connected) || false;
     });
@@ -300,11 +306,20 @@ export async function runScenario() {
       catch (error) { if ((error as any).status >= 500) return false; throw error; }
     });
     const actorRecoveredAt = Date.now();
+    const resetControls = await operator.request(`/operator/rooms/${roomA}/demo`);
+    assert.equal(resetControls.jevEnabled, false); assert.equal(resetControls.roboEnabled, false);
     assert.equal(afterRestart.id, booking.id); assert.equal(afterRestart.roomId, roomB); assert.equal(afterRestart.totalCents, booking.totalCents);
     assert.equal(restartedActor.job.id, savedJob.id); assert.equal(restartedActor.job.status, 'started'); assert.equal(restartedActor.expectedReadyAt, at('10:05'));
     assert.equal((db.query('SELECT count(*) AS n FROM notifications WHERE user_id=? AND type=\'readiness_disruption\'').get(guest.user!.id) as any).n, beforeNotifications);
     assert.equal((db.query('SELECT count(*) AS n FROM reservations WHERE checkout_session_id IS NOT NULL').get() as any).n, beforePayments);
     pass('actual actor/API/device/Relay engine/workers restart preserves room job, real assignment, amount, durable sessions and Relay identities');
+
+    const stoppedDemo = await operator.request(`/operator/rooms/${roomA}/demo`, { roboEnabled: false }, 'PATCH');
+    assert.equal(stoppedDemo.roboEnabled, false);
+    assert.equal(stoppedDemo.dockResult.accepted, true);
+    assert.equal(stoppedDemo.state.job.status, 'interrupted');
+    await assert.rejects(operator.request(`/operator/rooms/${roomA}/clean`, {}), (e: any) => e.status === 409 && e.code === 'robo_disabled');
+    pass('Robo off interrupts the recovered cleaning job through the actual device adapter and rejects another cleaning start');
 
     const evidence = { namespace, dataDir, selectedDate, timezone: 'America/Los_Angeles', ports, bookingId: booking.id, previousBookingId: previousBooking.id, roomA, roomB, previousScheduledEnd: at('09:45'), actualDeparture: at('09:55'), expectedReady: at('10:05'), interval: { startAt: booking.startAt, endAt: booking.endAt }, amountCents: booking.totalCents, funding: 'syntheticPaymentFixture; no Stripe charge or real payment claimed', deviceEvidence: 'simulator through the real Python adapter/native actor/Agent Relay path', mode: 'development rules using real tools', checks, stackPids, restartStartedAt, actorRecoveredAt, reconnectedWorkers, status: 'passed' };
     writeFileSync(join(dataDir, 'evidence.json'), JSON.stringify(evidence, null, 2) + '\n', { mode: 0o600 });

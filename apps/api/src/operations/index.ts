@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { audit, fail, parseJSON, requireOperator, uid, type Runtime } from '../core';
+import { cameraInspectionSchema, demoPatchSchema } from './demo';
 
 const roomPatch = z.object({ description: z.string().max(2000).optional(), rateCents: z.number().int().min(1).max(100000).nullable().optional(), accessInstructions: z.string().max(6000).nullable().optional(), hours: z.object({ open: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/), close: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/), days: z.array(z.number().int().min(1).max(7)), modeled: z.boolean() }).optional(), operational: z.enum(['available', 'maintenance', 'blocked']).optional(), reason: z.string().max(1000).optional() }).strict();
 
@@ -27,6 +28,18 @@ export function createOperationsRoutes(rt: Runtime) {
     return c.json({ rooms, deviceMode: rt.config.deviceMode, now: rt.clock.now(), note: rt.config.deviceMode === 'simulator' ? 'Simulated device observations. No physical robot or camera connection is claimed.' : 'Physical adapters enabled. Unverified connections remain explicitly unverified.' });
   });
   app.get('/operator/rooms/:id', async c => { await requireOperator(c, rt, c.req.param('id')); return c.json(await detail(c.req.param('id'))); });
+  app.get('/operator/rooms/:id/demo', async c => {
+    const id = c.req.param('id'); await requireOperator(c, rt, id);
+    const [status, state] = await Promise.all([operations().demoStatus(id), rt.rooms.snapshot(id)]);
+    return c.json({ ...status, state });
+  });
+  app.patch('/operator/rooms/:id/demo', async c => {
+    const id = c.req.param('id'); const user = await requireOperator(c, rt, id);
+    const changes = demoPatchSchema.parse(await c.req.json());
+    const status = await operations().configureDemo(id, changes);
+    audit(rt, user.id, 'demo.controls_changed', id, changes);
+    return c.json({ ...status, state: await rt.rooms.snapshot(id) });
+  });
   app.patch('/operator/rooms/:id', async c => {
     const id = c.req.param('id'); const user = await requireOperator(c, rt, id); const patch = roomPatch.parse(await c.req.json());
     const row = roomRecord(id); if (!row) fail(404, 'Office not found.');
@@ -43,6 +56,7 @@ export function createOperationsRoutes(rt: Runtime) {
   app.post('/operator/rooms/:id/inspect', async c => { const id = c.req.param('id'); const user = await requireOperator(c, rt, id); audit(rt, user.id, 'room.inspection_requested', id); const result = await operations().inspect(id); return c.json(result); });
   app.post('/operator/rooms/:id/clean', async c => {
     const id = c.req.param('id'); const user = await requireOperator(c, rt, id);
+    await operations().requireRobo(id);
     // Inspection is a real observation; only the actor may authorize later dispatch.
     await operations().inspect(id); await operations().telemetry(id);
     const state = await operations().command(id, { type: 'request_clean', jobId: uid('clean'), expectedReadyAt: rt.clock.now() + Number(rt.config.cleaningEstimateMs || 10 * 60_000) });
@@ -80,6 +94,19 @@ export function createOperationsRoutes(rt: Runtime) {
     const response = await fetch(`${deviceBase()}/v1/rooms/${encodeURIComponent(id)}/frame`, { headers: { authorization: `Bearer ${rt.config.internalToken}` }, signal: AbortSignal.timeout(5000) });
     if (!response.ok) fail(503, 'No verified camera frame is available.');
     c.header('Cache-Control', 'no-store'); c.header('Content-Type', 'image/jpeg'); return c.body(await response.arrayBuffer());
+  });
+  app.get('/operator/rooms/:id/stream', async c => {
+    const id = c.req.param('id'); await requireOperator(c, rt, id);
+    const controller = new AbortController();
+    c.req.raw.signal.addEventListener('abort', () => controller.abort(), { once: true });
+    const response = await fetch(`${deviceBase()}/v1/rooms/${encodeURIComponent(id)}/stream`, { headers: { authorization: `Bearer ${rt.config.internalToken}` }, signal: controller.signal });
+    if (!response.ok) fail(503, 'No camera stream is available.');
+    return new Response(response.body, { headers: { 'Content-Type': 'multipart/x-mixed-replace; boundary=frame', 'Cache-Control': 'no-store' } });
+  });
+  app.post('/internal/devices/inspection', async c => {
+    internal(c.req.header('authorization'));
+    const result = await operations().observeInspection(cameraInspectionSchema.parse(await c.req.json()));
+    return c.json({ accepted: result.ok, ...(result.code ? { code: result.code } : {}) });
   });
   app.post('/internal/devices/authorize', async c => { internal(c.req.header('authorization')); const body = z.object({ roomId: z.string(), commandId: z.string() }).parse(await c.req.json()); return c.json({ authorized: await operations().authorizePhysical(body.roomId, body.commandId), now: rt.clock.now() }); });
   app.post('/internal/simulator/:id', async c => {

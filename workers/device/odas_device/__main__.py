@@ -7,7 +7,8 @@ import time
 import uuid
 from pathlib import Path
 from aiohttp import ClientSession, web
-from .camera import Camera
+from .camera import Camera, Frame
+from .live import LiveInspections
 from .robot import Q10Cloud
 from .storage import Store
 from .vision import Vision
@@ -37,19 +38,27 @@ class Worker:
         self.cameras: dict[str, Camera] = {}
         self.robot: Q10Cloud | None = None
         self.vision: Vision | None = None
+        self.live: dict[str, LiveInspections] = {}
+        self.control_locks: dict[str, asyncio.Lock] = {}
 
     async def open(self, app):
         self.session = ClientSession()
         self.vision = Vision(self.session)
+        for room_id, binding in self.bindings.items():
+            if self.binding(room_id):
+                self.live[room_id] = LiveInspections(room_id, binding.get('cameraId', ''), self.vision, self.publish_inspection)
+                self.control_locks[room_id] = asyncio.Lock()
         if self.mode == 'physical':
             self.robot = Q10Cloud(self.session)
             self.robot.start()
             for camera_id, config in self.config.get('cameras', {}).items():
-                camera = Camera(camera_id, config, self.store, self.session)
+                camera = Camera(camera_id, config, self.store, self.session, lambda frame, camera_id=camera_id: self.captured(camera_id, frame))
                 camera.start()
                 self.cameras[camera_id] = camera
 
     async def close(self, app):
+        for live in self.live.values():
+            await live.close()
         for camera in self.cameras.values():
             await camera.close()
         if self.robot:
@@ -69,6 +78,56 @@ class Worker:
     def sim(self, room_id: str) -> dict:
         return self.store.get(f'sim:{room_id}', {'occupancy': 'vacant', 'floor': 'clean', 'surfaces': 'clear', 'confidence': 0.99, 'connection': 'connected', 'state': 'docked', 'battery': 100, 'cleaningDurationMs': 600000})
 
+    def captured(self, camera_id: str, frame: Frame) -> None:
+        for live in self.live.values():
+            if live.camera_id == camera_id:
+                live.submit(frame)
+
+    async def publish_inspection(self, observation: dict) -> bool:
+        base = os.environ.get('API_INTERNAL_URL', f"http://127.0.0.1:{os.environ.get('API_PORT', '3000')}")
+        async with self.session.post(f'{base}/api/internal/devices/inspection', json=observation, headers={'Authorization': f'Bearer {self.token}'}, timeout=5) as response:
+            return response.status == 200 and (await response.json()).get('accepted') is True
+
+    def demo_state(self, room_id: str) -> dict:
+        live = self.live.get(room_id)
+        if not live:
+            raise web.HTTPNotFound(reason='No device is bound to this office.')
+        camera = self.cameras.get(live.camera_id)
+        frame = camera.frame if camera else None
+        fresh = bool(camera and camera.connected and frame and time.time() * 1000 - frame.captured_at <= 15000)
+        return {
+            'roomId': room_id, 'mode': self.mode, 'captureFps': 4, **live.status(),
+            'camera': {'connected': fresh, 'capturedAt': frame.captured_at if frame else None, 'sequence': frame.sequence if frame else None, 'framesCaptured': camera.frames_captured if camera else 0},
+        }
+
+    async def demo_status(self, request):
+        return web.json_response(self.demo_state(request.match_info['room_id']))
+
+    async def configure_demo(self, request):
+        room_id = request.match_info['room_id']
+        if room_id not in self.live:
+            raise web.HTTPNotFound()
+        changes = await request.json()
+        if not isinstance(changes, dict) or not changes or any(key not in ('jevEnabled', 'roboEnabled') or type(value) is not bool for key, value in changes.items()):
+            raise web.HTTPBadRequest(reason='Set jevEnabled and/or roboEnabled to a boolean.')
+        async with self.control_locks[room_id]:
+            was_enabled = self.live[room_id].jev_enabled
+            await self.live[room_id].configure(changes)
+            if was_enabled and not self.live[room_id].jev_enabled and self.mode == 'physical':
+                observation = self.empty_inspection(room_id, 'Jev analysis is disabled.')
+                try:
+                    await self.publish_inspection(observation)
+                except Exception:
+                    self.live[room_id].last_error = 'Jev is off; could not invalidate the previous room inspection.'
+            return web.json_response(self.demo_state(room_id))
+
+    def empty_inspection(self, room_id: str, error: str) -> dict:
+        now = int(time.time() * 1000)
+        live = self.live.get(room_id)
+        camera = self.cameras.get(live.camera_id) if live else None
+        connected = bool(camera and camera.connected and camera.frame and now - camera.frame.captured_at <= 15000)
+        return {'id': f'inspection_{uuid.uuid4()}', 'roomId': room_id, 'source': 'camera', 'capturedAt': now, 'inferredAt': now, 'sequence': self.store.sequence(f'inspection:{room_id}'), 'occupancy': 'unknown', 'confidence': 0, 'floor': 'unknown', 'surfaces': 'unknown', 'connection': 'connected' if connected else 'disconnected', 'error': error}
+
     async def inspection(self, request):
         room_id = request.match_info['room_id']
         now = self.now(request)
@@ -82,16 +141,13 @@ class Worker:
                 state.update({'state': 'docked', 'floor': 'clean'})
                 self.store.put(f'sim:{room_id}', state)
             return web.json_response({**base, **{k: state[k] for k in ('occupancy', 'floor', 'surfaces', 'confidence', 'connection')}})
+        live = self.live[room_id]
+        if not live.jev_enabled:
+            return web.json_response(self.empty_inspection(room_id, 'Jev analysis is disabled.'))
         camera = self.cameras.get(binding.get('cameraId', ''))
         if not camera or not camera.frame or not camera.connected or now - camera.frame.captured_at > 15000:
             return web.json_response({**base, 'connection': 'disconnected', 'error': 'No fresh camera frame. Private network route and camera credentials require commissioning.'})
-        frame = camera.frame
-        base.update({'capturedAt': frame.captured_at, 'sequence': frame.sequence, 'frameId': f'{camera.id}:{frame.sequence}', 'connection': 'connected'})
-        try:
-            result = await self.vision.inspect(frame.jpeg)
-            return web.json_response({**base, **result, 'inferredAt': int(time.time() * 1000)})
-        except Exception:
-            return web.json_response({**base, 'inferredAt': int(time.time() * 1000), 'error': 'Vision inference failed. Readiness is not established.'})
+        return web.json_response(live.latest or self.empty_inspection(room_id, 'Waiting for the first Jev result.'))
 
     async def telemetry(self, request):
         room_id = request.match_info['room_id']
@@ -111,10 +167,13 @@ class Worker:
         return web.json_response(await self.robot.telemetry(room_id, duid))
 
     async def authorized(self, room_id: str, command_id: str) -> bool:
+        live = self.live.get(room_id)
+        if not live or not live.robo_enabled or self.mode == 'physical' and not live.jev_enabled:
+            return False
         base = os.environ.get('API_INTERNAL_URL', f"http://127.0.0.1:{os.environ.get('API_PORT', '3000')}")
         try:
             async with self.session.post(f'{base}/api/internal/devices/authorize', json={'roomId': room_id, 'commandId': command_id}, headers={'Authorization': f'Bearer {self.token}'}, timeout=5) as response:
-                return response.status == 200 and (await response.json()).get('authorized') is True
+                return response.status == 200 and (await response.json()).get('authorized') is True and live.robo_enabled and (self.mode != 'physical' or live.jev_enabled)
         except Exception:
             return False
 
@@ -131,6 +190,8 @@ class Worker:
         duplicate = self.store.claim(command_id, room_id, kind)
         if duplicate is not None:
             return web.json_response(duplicate)
+        if kind == 'start' and not self.live[room_id].robo_enabled:
+            return web.json_response(self.store.finish(command_id, {'accepted': False, 'uncertain': False, 'message': 'Robo cleaning is disabled.'}))
         # Recheck the authoritative actor immediately before a delayed physical/simulated start.
         if kind == 'start' and not await self.authorized(room_id, command_id):
             return web.json_response(self.store.finish(command_id, {'accepted': False, 'uncertain': False, 'message': 'RoomActor dispatch authorization or fresh vacancy has expired.'}))
@@ -185,6 +246,31 @@ class Worker:
             raise web.HTTPServiceUnavailable(text='No verified fresh camera frame is available')
         return web.Response(body=camera.frame.jpeg, content_type='image/jpeg', headers={'Cache-Control': 'no-store'})
 
+    async def stream(self, request):
+        binding = self.binding(request.match_info['room_id'])
+        camera = self.cameras.get(binding.get('cameraId')) if binding else None
+        if not camera:
+            raise web.HTTPServiceUnavailable(reason='No camera is configured.')
+        response = web.StreamResponse(headers={'Content-Type': 'multipart/x-mixed-replace; boundary=frame', 'Cache-Control': 'no-store'})
+        await response.prepare(request)
+        sequence = 0
+        try:
+            while True:
+                frame = camera.frame
+                if frame and frame.sequence != sequence and camera.connected:
+                    await response.write(b'--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ' + str(len(frame.jpeg)).encode() + b'\r\n\r\n' + frame.jpeg + b'\r\n')
+                    sequence = frame.sequence
+                camera.changed.clear()
+                if camera.frame is frame:
+                    try:
+                        await asyncio.wait_for(camera.changed.wait(), 5)
+                    except asyncio.TimeoutError:
+                        if request.transport is None or request.transport.is_closing():
+                            break
+        except (ConnectionResetError, BrokenPipeError):
+            pass
+        return response
+
     def app(self):
         @web.middleware
         async def auth(request, handler):
@@ -205,6 +291,9 @@ class Worker:
         app.router.add_get('/v1/rooms/{room_id}/inspection', self.inspection)
         app.router.add_get('/v1/rooms/{room_id}/telemetry', self.telemetry)
         app.router.add_get('/v1/rooms/{room_id}/frame', self.frame)
+        app.router.add_get('/v1/rooms/{room_id}/stream', self.stream)
+        app.router.add_get('/v1/rooms/{room_id}/demo', self.demo_status)
+        app.router.add_patch('/v1/rooms/{room_id}/demo', self.configure_demo)
         app.router.add_post('/v1/rooms/{room_id}/simulate', self.simulate)
         app.router.add_post('/v1/rooms/{room_id}/{kind:start|dock}', self.action)
         return app
