@@ -13,7 +13,7 @@ import { createOperationsRoutes } from '../operations';
 import { createCatalogService } from '../catalog/service';
 import { createCommerceService } from './service';
 import { createCommerceRoutes } from './index';
-import type { Reservation, User } from '@odas/contracts';
+import type { Inspection, Reservation, User } from '@odas/contracts';
 import { seed } from '../../../../scripts/seed';
 import { seedReservations } from '../../../../scripts/seed-reservations';
 import { recordRoomConversation, recordConciergeConversation, roomConversation } from '../operations/conversation';
@@ -213,6 +213,7 @@ export async function runCommerceIntegration() {
     assert.equal((await (await view('')).json() as any).canControlDevices, true);
     const granted = await app.request(`http://localhost/api/operator/rooms/${roomA}/demo`, { method: 'PATCH', headers: { Cookie: hostCookies, 'Content-Type': 'application/json' }, body: JSON.stringify({ jevEnabled: true }) });
     assert.equal(granted.status, 200); assert.equal(deviceMutations, 1);
+    assert.equal(roomConversation(rt, roomA).filter(item => item.source === 'Host').length, 0);
     const otherRoom = await app.request(`http://localhost/api/operator/rooms/${roomB}/demo`, { method: 'PATCH', headers: { Cookie: hostCookies, 'Content-Type': 'application/json' }, body: '{}' });
     assert.equal(otherRoom.status, 403);
     const conversation = await view('/conversation'); assert.equal(conversation.status, 200);
@@ -249,10 +250,16 @@ export async function runCommerceIntegration() {
   const chatRoom = `${group}-conversation`;
   db.query('INSERT INTO offices(id,group_id,name,description) VALUES(?,?,?,?)').run(chatRoom, group, 'Conversation fixture', 'Isolated event conversation fixture.');
   let sequence = 0;
-  const observe = async (floor: 'clean' | 'dirty', occupancy: 'vacant' | 'occupied' = 'vacant') => {
-    const result = await rt.rooms.command(chatRoom, { id: `chat-inspect-${++sequence}`, type: 'inspect', now, inspection: { id: `chat-frame-${sequence}`, roomId: chatRoom, source: 'simulator', capturedAt: now, inferredAt: now, sequence, connection: 'connected', occupancy, floor, surfaces: 'clear', confidence: .99 } });
+  const observe = async (floor: 'clean' | 'dirty', occupancy: Inspection['occupancy'] = 'vacant', extra: Partial<Inspection> = {}) => {
+    const result = await rt.rooms.command(chatRoom, { id: `chat-inspect-${++sequence}`, type: 'inspect', now, inspection: { id: `chat-frame-${sequence}`, roomId: chatRoom, source: 'simulator', capturedAt: now, inferredAt: now, sequence, connection: 'connected', occupancy, floor, surfaces: 'clear', confidence: .99, ...extra } });
     assert.ok(result.ok); recordRoomConversation(rt, result.snapshot); await recordConciergeConversation(rt, result.snapshot); return result.snapshot;
   };
+  await recordConciergeConversation(rt, await rt.rooms.snapshot(chatRoom));
+  for (const connection of ['connected', 'unverified', 'disconnected'] as const) {
+    await observe('dirty', 'unknown', { confidence: .2, connection });
+    await observe('clean', 'unknown', { confidence: .4, connection, error: 'Jev analysis is disabled.' });
+  }
+  assert.equal(roomConversation(rt, chatRoom).length, 0);
   const oldState = await observe('dirty');
   const initialMessages = roomConversation(rt, chatRoom).length;
   for (let index = 0; index < 5; index++) await observe('dirty');
@@ -262,6 +269,9 @@ export async function runCommerceIntegration() {
   recordRoomConversation(rt, oldState); await recordConciergeConversation(rt, oldState);
   assert.equal(roomConversation(rt, chatRoom).length, changedMessages);
   await observe('clean', 'occupied');
+  const occupiedMessages = roomConversation(rt, chatRoom).length;
+  await observe('dirty', 'occupied');
+  assert.equal(roomConversation(rt, chatRoom).length, occupiedMessages);
   assert.ok((roomConversation(rt, chatRoom) as any[]).some(item => item.source === 'Room agent' && item.target === 'Concierge' && item.body.includes('someone is in the room')));
   assert.ok(!(roomConversation(rt, chatRoom) as any[]).some(item => item.body.includes('I have started cleaning')));
   const robot = async (battery: number) => {
@@ -274,7 +284,18 @@ export async function runCommerceIntegration() {
   assert.equal(roomConversation(rt, chatRoom).length, beforeBatteryChange);
   now += 60_001; recordRoomConversation(rt, robotState);
   assert.ok((roomConversation(rt, chatRoom) as any[]).some(item => item.source === 'Robo' && item.body.includes('telemetry is stale')));
-  pass('room conversation suppresses repeated frames, ignores old snapshots, reports meaningful decisions and never claims unobserved cleaning');
+  const beforeLegacyNoise = roomConversation(rt, chatRoom);
+  const legacyNoise = [
+    ['Jev', 'Room agent', 'I cannot verify the room conditions. Keep cleaning on hold.'],
+    ['Jev', 'Room agent', 'Monitoring is off. I do not have a current room assessment.'],
+    ['Host', 'Jev', 'Jev checks disabled. Camera capture continues independently.'],
+    ['Room agent', 'Robo', 'The safety checks passed. Sending the vacuum command.'],
+  ];
+  for (const [source, target, body] of legacyNoise) db.query('INSERT INTO room_conversation(room_id,source,target,body,occurred_at) VALUES(?,?,?,?,?)').run(chatRoom, source, target, body, now);
+  const feed = await app.request(`http://localhost/api/operator/rooms/${chatRoom}/conversation`, { headers: { Cookie: hostCookies } });
+  assert.equal(feed.status, 200); assert.deepEqual((await feed.json() as any).messages, beforeLegacyNoise);
+  assert.equal((db.query('SELECT count(*) AS n FROM room_conversation WHERE room_id=?').get(chatRoom) as any).n, beforeLegacyNoise.length + legacyNoise.length);
+  pass('room conversation keeps impactful state changes, suppresses uncertainty and control chatter, filters legacy noise without deleting history, ignores old snapshots, and never claims unobserved cleaning');
   db.close();
   console.log(JSON.stringify({ checks: checks.length, dataDir: config.dataDir, actorUrl: process.env.TERSE_ACTOR_URL, paymentEvidence: config.stripeSecretKey ? 'real sandbox Checkout and expiration; successful payment/refund not exercised here' : 'not configured' }));
   return checks;
