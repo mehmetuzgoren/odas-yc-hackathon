@@ -11,6 +11,6 @@ export async function api<T=any>(path:string,options:RequestInit={}):Promise<T>{
  if(!response.ok)throw new ApiError(response.status,data?.error||'Something went wrong. Please try again.',data?.code);
  return data as T;
 }
-const SessionContext=createContext<{user:User|null;loading:boolean;refresh:()=>Promise<void>}>({user:null,loading:true,refresh:async()=>{}});
-export function SessionProvider({children}:{children:ReactNode}){const[user,setUser]=useState<User|null>(null);const[loading,setLoading]=useState(true);const refresh=useCallback(async()=>{try{const data=await api<{user:User|null;csrfToken:string}>('/auth/session');setUser(data.user);}finally{setLoading(false);}},[]);useEffect(()=>{void refresh().catch(()=>setLoading(false));},[refresh]);return <SessionContext.Provider value={{user,loading,refresh}}>{children}</SessionContext.Provider>;}
+const SessionContext=createContext<{user:User|null;loading:boolean;refresh:()=>Promise<void>;signInOpen:boolean;setSignInOpen:(open:boolean)=>void}>({user:null,loading:true,refresh:async()=>{},signInOpen:false,setSignInOpen:()=>{}});
+export function SessionProvider({children}:{children:ReactNode}){const[user,setUser]=useState<User|null>(null);const[loading,setLoading]=useState(true);const[signInOpen,setSignInOpen]=useState(false);const refresh=useCallback(async()=>{try{const data=await api<{user:User|null;csrfToken:string}>('/auth/session');setUser(data.user);}finally{setLoading(false);}},[]);useEffect(()=>{void refresh().catch(()=>setLoading(false));},[refresh]);return <SessionContext.Provider value={{user,loading,refresh,signInOpen,setSignInOpen}}>{children}</SessionContext.Provider>;}
 export const useSession=()=>useContext(SessionContext);

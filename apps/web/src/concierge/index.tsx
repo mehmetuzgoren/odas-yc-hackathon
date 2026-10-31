@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { Bell, MessageCircle, Send, X } from 'lucide-react';
 import { money, TIMEZONE, type ChatMessage, type Notification, type Office, type ReplacementOffer } from '@odas/contracts';
 import { api, useSession } from '../api';
+import { roomName } from '../marketplace/listing';
 import './styles.css';
 
 type Action = { name: string; input: any; label: string };
@@ -12,14 +13,14 @@ function errorText(error: unknown) { return error instanceof Error ? error.messa
 function time(value: number) { return new Intl.DateTimeFormat('en-US', { timeZone: TIMEZONE, hour: 'numeric', minute: '2-digit' }).format(value); }
 
 export function ConciergePanel({ bookingId }: { bookingId?: string } = {}) {
-  const { user } = useSession(); const location = useLocation();
+  const { user, setSignInOpen } = useSession(); const location = useLocation();
   const dialogRef = useRef<HTMLDialogElement>(null); const triggerRef = useRef<HTMLButtonElement>(null); const headingRef = useRef<HTMLHeadingElement>(null); const transcriptRef = useRef<HTMLDivElement>(null);
   const selectedRef = useRef<string | null>(null); const userRef = useRef(user); const autoSeen = useRef(new Set<string>());
   const [open, setOpen] = useState(false); const [tab, setTab] = useState<'chat' | 'updates'>('chat');
   const [conversations, setConversations] = useState<Conversation[]>([]); const [selected, setSelected] = useState<string | null>(null); const [messages, setMessages] = useState<Message[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]); const [content, setContent] = useState(''); const [busy, setBusy] = useState(false); const [loading, setLoading] = useState(false); const [error, setError] = useState('');
   const [mode, setMode] = useState('development_rules'); const [connected, setConnected] = useState(false); const [workersConnected, setWorkersConnected] = useState(true); const [actionBusy, setActionBusy] = useState<string | null>(null);
-  const currentBookingId = bookingId ?? location.pathname.match(/^\/reservations\/([^/]+)$/)?.[1];
+  const currentBookingId = bookingId ?? location.pathname.match(/^\/bookings\/([^/]+)$/)?.[1];
   const unread = notifications.filter(v => !v.readAt).length;
   const waiting = messages.length > 0 && messages.at(-1)?.role === 'user';
   const close = useCallback(() => { dialogRef.current?.close(); setOpen(false); triggerRef.current?.focus(); }, []);
@@ -136,14 +137,14 @@ export function ConciergePanel({ bookingId }: { bookingId?: string } = {}) {
     catch (error) { setError(errorText(error)); }
   }
   return <>
-    <button ref={triggerRef} type="button" className="concierge-launcher" onClick={() => void openForBooking(currentBookingId)} aria-haspopup="dialog" aria-label={`Open ODAS concierge${unread ? `, ${unread} unread updates` : ''}`}>
-      <MessageCircle size={20} aria-hidden="true" /><span>Concierge</span>{unread > 0 && <span className="concierge-count">{unread}</span>}
+    <button ref={triggerRef} type="button" className="concierge-launcher" title="Concierge" onClick={() => void openForBooking(currentBookingId)} aria-haspopup="dialog" aria-label={`Open Odas concierge${unread ? `, ${unread} unread updates` : ''}`}>
+      <MessageCircle size={18} aria-hidden="true" />{unread > 0 && <span className="concierge-count">{unread}</span>}
     </button>
     <dialog ref={dialogRef} className="concierge-dialog" aria-labelledby="concierge-title" onCancel={() => { setOpen(false); triggerRef.current?.focus(); }} onClose={() => setOpen(false)} onClick={event => { if (event.target === event.currentTarget) close(); }}>
       <div className="concierge-shell">
-        <header className="concierge-header"><div><p className="concierge-eyebrow">ODAS · here to help</p><h2 ref={headingRef} tabIndex={-1} id="concierge-title">Your concierge</h2></div><button className="concierge-icon" aria-label="Close concierge" onClick={close}><X size={22} /></button></header>
+        <header className="concierge-header"><div><p className="eyebrow">Odas · here to help</p><h2 ref={headingRef} tabIndex={-1} id="concierge-title">Your concierge</h2></div><button className="concierge-icon" aria-label="Close concierge" onClick={close}><X size={22} /></button></header>
         <div className="concierge-tabs" role="tablist" aria-label="Concierge sections" onKeyDown={event => { if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return; event.preventDefault(); const next = event.key === 'Home' ? 'chat' : event.key === 'End' ? 'updates' : tab === 'chat' ? 'updates' : 'chat'; setTab(next); (event.currentTarget.querySelector(`#concierge-${next}-tab`) as HTMLButtonElement | null)?.focus(); }}><button role="tab" tabIndex={tab === 'chat' ? 0 : -1} aria-selected={tab === 'chat'} aria-controls="concierge-chat" id="concierge-chat-tab" onClick={() => setTab('chat')}><MessageCircle size={16} />Conversation</button><button role="tab" tabIndex={tab === 'updates' ? 0 : -1} aria-selected={tab === 'updates'} aria-controls="concierge-updates" id="concierge-updates-tab" onClick={() => setTab('updates')}><Bell size={16} />Updates {unread ? `(${unread})` : ''}</button></div>
-        {!user ? <div className="concierge-signin"><h3>Keep the conversation going.</h3><p>Sign in to save your messages and receive reservation updates.</p><Link className="button" to={`/login?next=${encodeURIComponent(location.pathname + location.search)}`} onClick={close}>Sign in</Link></div> : <>
+        {!user ? <div className="concierge-signin"><h3>Keep the conversation going.</h3><p>Sign in to save your messages and receive reservation updates.</p><button className="button" onClick={() => { close(); setSignInOpen(true); }}>Sign in</button></div> : <>
           <p className="concierge-status" aria-live="polite">{mode === 'development_rules' ? 'Development rules mode' : 'AI concierge'}<span>{connected ? 'Updates connected' : 'Reconnecting updates…'}</span></p>
           {!workersConnected && <p className="concierge-pipeline" role="status">The concierge worker is reconnecting. Your messages are saved and will resume when it returns.</p>}
           {error && <p className="error concierge-error" role="alert">{error}</p>}
@@ -152,7 +153,7 @@ export function ConciergePanel({ bookingId }: { bookingId?: string } = {}) {
             <div ref={transcriptRef} className="concierge-transcript" role="log" aria-label="Conversation messages" aria-live="polite" aria-relevant="additions">
               {loading && <p className="muted" role="status">Loading your conversation…</p>}
               {!loading && messages.length === 0 && <p className="concierge-empty">Tell me where and when you need an office, and your hourly budget.</p>}
-              {messages.map(message => <article key={message.id} className={`concierge-message concierge-message-${message.role}`}><span className="concierge-message-label">{message.role === 'user' ? 'You' : 'ODAS concierge'} · {time(message.createdAt)}</span><p>{message.content}</p>
+              {messages.map(message => <article key={message.id} className={`concierge-message concierge-message-${message.role}`}><span className="concierge-message-label">{message.role === 'user' ? 'You' : 'Odas concierge'} · {time(message.createdAt)}</span><p>{message.content}</p>
                 {message.cards?.map(office => <OfficeCard key={office.id} office={office} message={message} onNavigate={close} />)}
                 {message.offer && <div className="concierge-offer"><span className="badge">Replacement offer</span><h4>{message.offer.office?.name ?? 'Available office'}</h4><p>{message.offer.equivalence}</p>{message.offer.differences.length > 0 && <p>Differences: {message.offer.differences.join('; ')}</p>}<p className="muted">Offer expires at {time(message.offer.expiresAt)} Pacific. Time and amount paid stay the same.</p><div className="concierge-actions"><button className="button" disabled={!!actionBusy || message.offer.status !== 'offered'} onClick={() => void offerAction(message, message.offer!, true)}>Accept replacement</button><button className="button secondary" disabled={!!actionBusy || message.offer.status !== 'offered'} onClick={() => void offerAction(message, message.offer!, false)}>Keep current office</button></div></div>}
                 {message.actions?.map((action, index) => <div className="concierge-tool-action" key={`${action.name}:${index}`}><QuoteSummary message={message} action={action} /><button className={`button ${action.name === 'cancel_reservation' ? 'danger' : ''}`} disabled={!!actionBusy} onClick={() => void runAction(message.id, action)}>{actionBusy === `${message.id}:${action.name}` ? 'Working…' : action.label}</button></div>)}
@@ -161,7 +162,7 @@ export function ConciergePanel({ bookingId }: { bookingId?: string } = {}) {
               {waiting && <p className="concierge-waiting" role="status">Your message is saved. The concierge is working on it…</p>}
             </div>
             <form className="concierge-compose" onSubmit={submit}><label className="sr-only" htmlFor="concierge-message">Message the concierge</label><textarea id="concierge-message" rows={2} maxLength={4000} value={content} onChange={event => setContent(event.target.value)} placeholder="Ask about offices or your reservation…" onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} /><button type="submit" className="button concierge-send" disabled={busy || !content.trim()} aria-label={busy ? 'Saving message' : 'Send message'}><Send size={18} /></button></form>
-          </section> : <section id="concierge-updates" role="tabpanel" aria-labelledby="concierge-updates-tab" className="concierge-updates">{notifications.length === 0 ? <p className="muted">Reservation updates will appear here.</p> : notifications.map(notification => <article key={notification.id} className={notification.readAt ? 'concierge-update' : 'concierge-update unread'}><p className="concierge-message-label">{new Intl.DateTimeFormat('en-US', { timeZone: TIMEZONE, month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(notification.createdAt)}</p><h3>{notification.title}</h3><p>{notification.body}</p><div className="concierge-actions">{notification.bookingId && <Link to={`/reservations/${notification.bookingId}`} onClick={close}>View reservation</Link>}{notification.openConcierge && <button onClick={() => void openForBooking(notification.bookingId, String(notification.data?.conversationId ?? '') || undefined)}>Open conversation</button>}{!notification.readAt && <button onClick={() => void markRead(notification)}>Mark read</button>}</div></article>)}</section>}
+          </section> : <section id="concierge-updates" role="tabpanel" aria-labelledby="concierge-updates-tab" className="concierge-updates">{notifications.length === 0 ? <p className="muted">Reservation updates will appear here.</p> : notifications.map(notification => <article key={notification.id} className={notification.readAt ? 'concierge-update' : 'concierge-update unread'}><p className="concierge-message-label">{new Intl.DateTimeFormat('en-US', { timeZone: TIMEZONE, month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(notification.createdAt)}</p><h3>{notification.title}</h3><p>{notification.body}</p><div className="concierge-actions">{notification.bookingId && <Link to={`/bookings/${notification.bookingId}`} onClick={close}>View reservation</Link>}{notification.openConcierge && <button onClick={() => void openForBooking(notification.bookingId, String(notification.data?.conversationId ?? '') || undefined)}>Open conversation</button>}{!notification.readAt && <button onClick={() => void markRead(notification)}>Mark read</button>}</div></article>)}</section>}
         </>}
       </div>
     </dialog>
@@ -171,7 +172,7 @@ function OfficeCard({ office, message, onNavigate }: { office: Office; message: 
   const search = (message.toolResults as any[])?.find(v => v.tool === 'search_offices');
   const input = search?.input ?? search?.result ?? {};
   const params = new URLSearchParams(); if (input.startAt) params.set('startAt', String(input.startAt)); if (input.endAt) params.set('endAt', String(input.endAt));
-  return <Link className="concierge-office-card" to={`/offices/${office.id}?${params}`} onClick={onNavigate}><div><strong>{office.name}</strong><span>{office.workspace?.name ?? office.groupId}</span><small>Modeled inventory</small></div><strong>{money(office.rateCents)}<small>/hour</small></strong></Link>;
+  return <Link className="concierge-office-card" to={`/rooms/${office.id}?${params}`} onClick={onNavigate}><div><strong>{roomName(office.name)}</strong><span>{office.workspace?.name ?? office.groupId}</span><small>Modeled inventory</small></div><strong>{money(office.rateCents)}<small>/hour</small></strong></Link>;
 }
 function QuoteSummary({ message, action }: { message: Message; action: Action }) {
   const result = (message.toolResults as any[])?.find(v => v.tool === action.name && v.result?.quote)?.result;
