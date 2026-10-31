@@ -240,6 +240,12 @@ export async function runScenario() {
     assert.ok(relayRows.some(o => JSON.parse(o.event_json).type === 'cleaning.requested'));
     assert.ok(db.query('SELECT 1 FROM processed_messages WHERE worker=\'operations\' AND event_id IN (SELECT json_extract(event_json,\'$.id\') FROM outbox WHERE json_extract(event_json,\'$.type\')=\'cleaning.requested\') AND status=\'completed\'').get());
     pass('9:55 fresh vacancy → native actor/outbox → actual Relay workers → observed clean with 10:05 configured ETA → persisted guest notification and concierge offer over SSE');
+    const agentMessages = await waitFor('state-change conversation through real Relay handlers', async () => {
+      const { messages } = await operator.request(`/operator/rooms/${roomA}/conversation`);
+      return messages.some((item: any) => item.source === 'Robo' && item.body.includes('I have started cleaning')) && messages.some((item: any) => item.source === 'Room agent' && item.target === 'Concierge' && item.body.startsWith('Not yet:')) ? messages : false;
+    });
+    assert.ok(agentMessages.some((item: any) => item.source === 'Room agent' && item.target === 'Robo'));
+    pass('actual observations, actor cleaning requests, robot motion and concierge readiness decisions appear as scoped conversation messages');
 
     await guest.request(`/offers/${firstOffer.id}/decline`, {});
     assert.equal((await guest.request<Reservation>(`/reservations/${booking.id}`)).roomId, roomA);
@@ -285,6 +291,7 @@ export async function runScenario() {
 
     const savedIdentities = JSON.parse(readFileSync(join(dataDir, 'relay-identities.json'), 'utf8'));
     const savedJob = (await operator.request(`/operator/rooms/${roomA}`)).state.job;
+    const savedAgentMessages = (await operator.request(`/operator/rooms/${roomA}/conversation`)).messages;
     assert.equal(savedJob.status, 'started');
     await stopStack();
     const restartStartedAt = Date.now();
@@ -310,6 +317,8 @@ export async function runScenario() {
     assert.equal(resetControls.jevEnabled, false); assert.equal(resetControls.roboEnabled, false);
     assert.equal(afterRestart.id, booking.id); assert.equal(afterRestart.roomId, roomB); assert.equal(afterRestart.totalCents, booking.totalCents);
     assert.equal(restartedActor.job.id, savedJob.id); assert.equal(restartedActor.job.status, 'started'); assert.equal(restartedActor.expectedReadyAt, at('10:05'));
+    const restoredAgentMessages = (await operator.request(`/operator/rooms/${roomA}/conversation`)).messages;
+    assert.ok(savedAgentMessages.every((saved: any) => restoredAgentMessages.some((item: any) => item.id === saved.id && item.body === saved.body)));
     assert.equal((db.query('SELECT count(*) AS n FROM notifications WHERE user_id=? AND type=\'readiness_disruption\'').get(guest.user!.id) as any).n, beforeNotifications);
     assert.equal((db.query('SELECT count(*) AS n FROM reservations WHERE checkout_session_id IS NOT NULL').get() as any).n, beforePayments);
     pass('actual actor/API/device/Relay engine/workers restart preserves room job, real assignment, amount, durable sessions and Relay identities');

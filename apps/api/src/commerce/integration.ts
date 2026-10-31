@@ -16,6 +16,7 @@ import { createCommerceRoutes } from './index';
 import type { Reservation, User } from '@odas/contracts';
 import { seed } from '../../../../scripts/seed';
 import { seedReservations } from '../../../../scripts/seed-reservations';
+import { recordRoomConversation, recordConciergeConversation, roomConversation } from '../operations/conversation';
 
 export async function runCommerceIntegration() {
   if (!process.env.TERSE_ACTOR_URL?.includes(':7111/')) throw new Error('Run commerce checks with the isolated native actor runtime on port 7111.');
@@ -207,6 +208,16 @@ export async function runCommerceIntegration() {
     }
     assert.equal(deviceMutations, 0);
     pass('assigned test hosts can view physical room details, demo status and camera frames; guests and device-control mutations remain blocked');
+    assert.equal((await (await view('')).json() as any).canControlDevices, false);
+    db.query('INSERT INTO operator_device_grants(user_id,room_id) VALUES(?,?)').run(hostId, roomA);
+    assert.equal((await (await view('')).json() as any).canControlDevices, true);
+    const granted = await app.request(`http://localhost/api/operator/rooms/${roomA}/demo`, { method: 'PATCH', headers: { Cookie: hostCookies, 'Content-Type': 'application/json' }, body: JSON.stringify({ jevEnabled: true }) });
+    assert.equal(granted.status, 200); assert.equal(deviceMutations, 1);
+    const otherRoom = await app.request(`http://localhost/api/operator/rooms/${roomB}/demo`, { method: 'PATCH', headers: { Cookie: hostCookies, 'Content-Type': 'application/json' }, body: '{}' });
+    assert.equal(otherRoom.status, 403);
+    const conversation = await view('/conversation'); assert.equal(conversation.status, 200);
+    assert.equal((await view('/conversation', cookies)).status, 403);
+    pass('an explicit room device grant enables its host controls without granting another room or exposing conversations to guests');
   } finally {
     config.deviceMode = originalMode; config.deviceUrl = originalDeviceUrl; deviceFixture.stop(true);
   }
@@ -234,6 +245,36 @@ export async function runCommerceIntegration() {
   assert.equal(competing.ok, false); assert.equal(competing.code, 'unavailable');
   assert.equal(await rt.rooms.available('polk-310-office-01', demo.start_at, demo.end_at), true);
   pass('demo schedule seeds confirmed native reservations, rejects overlapping quotes and holds, preserves other bookings and first rooms, and reruns without duplicates or payments');
+
+  const chatRoom = `${group}-conversation`;
+  db.query('INSERT INTO offices(id,group_id,name,description) VALUES(?,?,?,?)').run(chatRoom, group, 'Conversation fixture', 'Isolated event conversation fixture.');
+  let sequence = 0;
+  const observe = async (floor: 'clean' | 'dirty', occupancy: 'vacant' | 'occupied' = 'vacant') => {
+    const result = await rt.rooms.command(chatRoom, { id: `chat-inspect-${++sequence}`, type: 'inspect', now, inspection: { id: `chat-frame-${sequence}`, roomId: chatRoom, source: 'simulator', capturedAt: now, inferredAt: now, sequence, connection: 'connected', occupancy, floor, surfaces: 'clear', confidence: .99 } });
+    assert.ok(result.ok); recordRoomConversation(rt, result.snapshot); await recordConciergeConversation(rt, result.snapshot); return result.snapshot;
+  };
+  const oldState = await observe('dirty');
+  const initialMessages = roomConversation(rt, chatRoom).length;
+  for (let index = 0; index < 5; index++) await observe('dirty');
+  assert.equal(roomConversation(rt, chatRoom).length, initialMessages);
+  await observe('clean');
+  const changedMessages = roomConversation(rt, chatRoom).length;
+  recordRoomConversation(rt, oldState); await recordConciergeConversation(rt, oldState);
+  assert.equal(roomConversation(rt, chatRoom).length, changedMessages);
+  await observe('clean', 'occupied');
+  assert.ok((roomConversation(rt, chatRoom) as any[]).some(item => item.source === 'Room agent' && item.target === 'Concierge' && item.body.includes('someone is in the room')));
+  assert.ok(!(roomConversation(rt, chatRoom) as any[]).some(item => item.body.includes('I have started cleaning')));
+  const robot = async (battery: number) => {
+    const observed = await rt.rooms.command(chatRoom, { id: `chat-robot-${battery}`, type: 'telemetry', now, telemetry: { roomId: chatRoom, source: 'simulator', observedAt: now, connection: 'connected', state: 'docked', battery } });
+    assert.ok(observed.ok); recordRoomConversation(rt, observed.snapshot); return observed.snapshot;
+  };
+  await robot(99);
+  const beforeBatteryChange = roomConversation(rt, chatRoom).length;
+  const robotState = await robot(98);
+  assert.equal(roomConversation(rt, chatRoom).length, beforeBatteryChange);
+  now += 60_001; recordRoomConversation(rt, robotState);
+  assert.ok((roomConversation(rt, chatRoom) as any[]).some(item => item.source === 'Robo' && item.body.includes('telemetry is stale')));
+  pass('room conversation suppresses repeated frames, ignores old snapshots, reports meaningful decisions and never claims unobserved cleaning');
   db.close();
   console.log(JSON.stringify({ checks: checks.length, dataDir: config.dataDir, actorUrl: process.env.TERSE_ACTOR_URL, paymentEvidence: config.stripeSecretKey ? 'real sandbox Checkout and expiration; successful payment/refund not exercised here' : 'not configured' }));
   return checks;

@@ -2,6 +2,8 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { audit, fail, parseJSON, requireOperator, uid, type Runtime } from '../core';
 import { cameraInspectionSchema, demoPatchSchema } from './demo';
+import { canControlDevices } from './permissions';
+import { roomConversation } from './conversation';
 
 const roomPatch = z.object({ description: z.string().max(2000).optional(), rateCents: z.number().int().min(1).max(100000).nullable().optional(), accessInstructions: z.string().max(6000).nullable().optional(), hours: z.object({ open: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/), close: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/), days: z.array(z.number().int().min(1).max(7)), modeled: z.boolean() }).optional(), operational: z.enum(['available', 'maintenance', 'blocked']).optional(), reason: z.string().max(1000).optional() }).strict();
 
@@ -27,7 +29,8 @@ export function createOperationsRoutes(rt: Runtime) {
     for (const row of rows) rooms.push({ id: row.id, name: row.name, groupId: row.group_id, workspaceName: row.workspace_name, rateCents: row.rate_cents, state: await rt.rooms.snapshot(row.id) });
     return c.json({ rooms, deviceMode: rt.config.deviceMode, now: rt.clock.now(), note: rt.config.deviceMode === 'simulator' ? 'Simulated device observations. No physical robot or camera connection is claimed.' : 'Physical adapters enabled. Unverified connections remain explicitly unverified.' });
   });
-  app.get('/operator/rooms/:id', async c => { await requireOperator(c, rt, c.req.param('id')); return c.json(await detail(c.req.param('id'))); });
+  app.get('/operator/rooms/:id', async c => { const user = await requireOperator(c, rt, c.req.param('id')); return c.json({ ...await detail(c.req.param('id')), canControlDevices: canControlDevices(rt, user, c.req.param('id')) }); });
+  app.get('/operator/rooms/:id/conversation', async c => { const id = c.req.param('id'); await requireOperator(c, rt, id); return c.json({ messages: roomConversation(rt, id) }); });
   app.get('/operator/rooms/:id/demo', async c => {
     const id = c.req.param('id'); await requireOperator(c, rt, id);
     const [status, state] = await Promise.all([operations().demoStatus(id), rt.rooms.snapshot(id)]);

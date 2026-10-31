@@ -12,6 +12,7 @@ export function openDatabase(dataDir: string) {
  CREATE TABLE IF NOT EXISTS sessions(id_hash TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),expires_at INTEGER NOT NULL,csrf_token TEXT NOT NULL,created_at INTEGER NOT NULL);
  CREATE INDEX IF NOT EXISTS sessions_user ON sessions(user_id);
  CREATE TABLE IF NOT EXISTS operator_scopes(user_id TEXT NOT NULL REFERENCES users(id),group_id TEXT NOT NULL,PRIMARY KEY(user_id,group_id));
+ CREATE TABLE IF NOT EXISTS operator_device_grants(user_id TEXT NOT NULL REFERENCES users(id),room_id TEXT NOT NULL REFERENCES offices(id),PRIMARY KEY(user_id,room_id));
  CREATE TABLE IF NOT EXISTS workspace_groups(id TEXT PRIMARY KEY,name TEXT NOT NULL,address TEXT NOT NULL,latitude REAL NOT NULL,longitude REAL NOT NULL,base_rate_cents INTEGER NOT NULL,timezone TEXT NOT NULL,modeled INTEGER NOT NULL DEFAULT 1,description TEXT NOT NULL,hours_json TEXT NOT NULL,photos_json TEXT NOT NULL DEFAULT '[]',attributes_json TEXT NOT NULL DEFAULT '{}',access_instructions TEXT,data TEXT NOT NULL DEFAULT '{}');
  CREATE TABLE IF NOT EXISTS offices(id TEXT PRIMARY KEY,group_id TEXT NOT NULL REFERENCES workspace_groups(id),name TEXT NOT NULL,description TEXT NOT NULL,rate_cents INTEGER,modeled INTEGER NOT NULL DEFAULT 1,photos_json TEXT NOT NULL DEFAULT '[]',attributes_json TEXT NOT NULL DEFAULT '{}',device_binding_json TEXT,data TEXT NOT NULL DEFAULT '{}');
  CREATE INDEX IF NOT EXISTS offices_group ON offices(group_id);
@@ -41,6 +42,9 @@ export function openDatabase(dataDir: string) {
  CREATE TABLE IF NOT EXISTS notifications(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,booking_id TEXT,type TEXT NOT NULL,title TEXT NOT NULL,body TEXT NOT NULL,created_at INTEGER NOT NULL,read_at INTEGER,open_concierge INTEGER NOT NULL DEFAULT 0,idempotency_key TEXT UNIQUE,data TEXT NOT NULL DEFAULT '{}');
  CREATE INDEX IF NOT EXISTS notifications_user ON notifications(user_id,created_at);
  CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
+ CREATE TABLE IF NOT EXISTS room_conversation(id INTEGER PRIMARY KEY AUTOINCREMENT,room_id TEXT NOT NULL,source TEXT NOT NULL,target TEXT NOT NULL,body TEXT NOT NULL,occurred_at INTEGER NOT NULL);
+ CREATE INDEX IF NOT EXISTS room_conversation_room ON room_conversation(room_id,id);
+ CREATE TABLE IF NOT EXISTS room_conversation_state(room_id TEXT NOT NULL,channel TEXT NOT NULL,signature TEXT NOT NULL,revision INTEGER NOT NULL,PRIMARY KEY(room_id,channel));
  INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES(1,unixepoch()*1000);
  `);
  const swapsSchema = (db.query("SELECT sql FROM sqlite_master WHERE type='table' AND name='swaps'").get() as {sql:string}).sql;
