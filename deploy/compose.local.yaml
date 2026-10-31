@@ -1,0 +1,25 @@
+# Isolated packaged development runtime, including native local Terse actors.
+# This is not the managed production actor deployment.
+services:
+  odas-local:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    command: ["bun", "run", "dev"]
+    environment:
+      NODE_ENV: development
+      DATA_DIR: /data
+      ODAS_NAMESPACE: package-review
+      APP_ORIGIN: http://127.0.0.1:5174
+      WEB_HOST: 0.0.0.0
+      WEB_PORT: 5173
+      DEVICE_MODE: simulator
+      CONCIERGE_MODE: rules
+      RELAY_NODE_BINARY: node
+    ports:
+      - "127.0.0.1:5174:5173"
+    volumes:
+      - odas-review:/data
+    stop_grace_period: 15s
+volumes:
+  odas-review:

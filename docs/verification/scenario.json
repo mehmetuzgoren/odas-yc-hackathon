@@ -1,0 +1,56 @@
+{
+  "namespace": "test-scenario-01de451d",
+  "dataDir": "/Users/mehmetuzgoren/.codex/worktrees/odas-mvp/odas-hackathon-yc/.data/test-scenario-01de451d",
+  "selectedDate": "2026-11-01",
+  "timezone": "America/Los_Angeles",
+  "ports": {
+    "api": 3012,
+    "actors": 7112,
+    "relay": 8792,
+    "device": 8092,
+    "web": 5182
+  },
+  "bookingId": "odas_8d88b3c9-0a9b-41e1-a5d5-918da7b30c63",
+  "previousBookingId": "odas_62c03a38-98cf-484a-9c06-24b2f19fef9d",
+  "roomA": "scenario-01de451d-office-a",
+  "roomB": "scenario-01de451d-office-b",
+  "previousScheduledEnd": 1793555100000,
+  "actualDeparture": 1793555700000,
+  "expectedReady": 1793556300000,
+  "interval": {
+    "startAt": 1793556000000,
+    "endAt": 1793563200000
+  },
+  "amountCents": 1100,
+  "funding": "syntheticPaymentFixture; no Stripe charge or real payment claimed",
+  "deviceEvidence": "simulator through the real Python adapter/native actor/Agent Relay path",
+  "mode": "development rules using real tools",
+  "checks": [
+    "real HTTP origin/CSRF gates, guest/operator separation, private camera access, cross-guest ownership and operator workspace scope",
+    "normal accounts and quote/hold/native confirmation produce the 9:45 end and 10am to 12pm reservations; funding is explicitly synthetic",
+    "previous guest remains present at 9:45; scheduled end does not authorize a clean",
+    "9:55 fresh vacancy → native actor/outbox → actual Relay workers → observed clean with 10:05 configured ETA → persisted guest notification and concierge offer over SSE",
+    "decline and natural offer expiry preserve Office A; explicit acceptance assigns real Office B inventory with unchanged public ID, interval, and amount",
+    "actual Relay duplicate redelivery and repeated acceptance do not duplicate guest disruption, swap, or payment",
+    "actual actor/API/device/Relay engine/workers restart preserves room job, real assignment, amount, durable sessions and Relay identities"
+  ],
+  "stackPids": [
+    60040,
+    62668
+  ],
+  "restartStartedAt": 1793472721384,
+  "actorRecoveredAt": 1793472747888,
+  "reconnectedWorkers": [
+    {
+      "worker": "operations",
+      "connected": true,
+      "lastSeenAt": 1793472726688
+    },
+    {
+      "worker": "concierge",
+      "connected": true,
+      "lastSeenAt": 1793472726953
+    }
+  ],
+  "status": "passed"
+}

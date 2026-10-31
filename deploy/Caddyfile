@@ -1,0 +1,11 @@
+{$ODAS_DOMAIN} {
+  encode zstd gzip
+  reverse_proxy odas:3000 {
+    flush_interval -1
+  }
+  header {
+    X-Content-Type-Options nosniff
+    Referrer-Policy same-origin
+    X-Frame-Options DENY
+  }
+}

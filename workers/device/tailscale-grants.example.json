@@ -1,0 +1,14 @@
+{
+  "tagOwners": {
+    "tag:odas-backend": ["autogroup:admin"],
+    "tag:odas-office-gateway": ["autogroup:admin"]
+  },
+  "autoApprovers": {
+    "routes": {
+      "192.168.50.20/32": ["tag:odas-office-gateway"]
+    }
+  },
+  "grants": [
+    {"src": ["tag:odas-backend"], "dst": ["192.168.50.20/32"], "ip": ["tcp:554"]}
+  ]
+}
