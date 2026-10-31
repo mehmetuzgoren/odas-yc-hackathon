@@ -17,6 +17,8 @@ The seed contains 6 explicit workspace groups and 31 modeled offices. Configured
 
 Development guest and operator accounts use ordinary password login. Their generated credentials are in the ignored `.data/development/dev-accounts.json`, mode 0600. Set `DEV_GUEST_PASSWORD` and `DEV_OPERATOR_PASSWORD` before first seeding to choose them. Public signup always creates a guest. Test operator accounts can view their assigned rooms and camera feeds; changing physical-device controls requires a physical-capable operator. Production startup does not seed development accounts.
 
+With the development stack running, populate the host schedule with `bun run seed:reservations`. It creates staggered confirmed reservations for rooms 2 onward in each building for today and the next three days, in Pacific time. Their reserved times and turnover buffers reject overlapping bookings through native room inventory. Each building's first room stays available for the live demo. The records have demo payment status and never charge Stripe or control devices. Repeating the command preserves existing reservations and skips elapsed slots or conflicts. Use `--date YYYY-MM-DD --days 4` to choose another date range.
+
 Provision an operator separately with `bun run operator:create --email operator@example.com --name "Office operator" --groups polk-310`. Supply `OPERATOR_PASSWORD` privately, or use the generated ignored credential file. Scope IDs are explicit. The account defaults to test permissions; `--allow-physical` explicitly permits physical device access after commissioning. Existing guest accounts are never silently promoted.
 
 ## Configure
