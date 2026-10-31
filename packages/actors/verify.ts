@@ -71,5 +71,19 @@ if (phase === 'before') {
   assert.equal((await inspect(8, at + 8500, { floor: 'clean', capturedAt: at + 7500 })).ok, false, 'late inference of a pre-dock frame cannot restore readiness');
   assert((await inspect(9, at + 9000, { floor: 'clean' })).ok);
   assert.equal((await actor.snapshot()).readiness, 'ready', 'a fresh post-dock inspection may restore readiness');
+  // Stage cleanup ignores unassessed desks, but still interrupts on a person.
+  const stage = actors.RoomActor.get('stage-safety-room');
+  let stageSeq = 0;
+  const stageCommand = (fields: any) => stage.command({ id: `stage:${++stageSeq}`, now: at + 10000 + stageSeq, ...fields });
+  const stageInspection = { id: 'stage-frame', roomId: 'stage-safety-room', source: 'camera', capturedAt: at + 10000, inferredAt: at + 10000, sequence: 1, occupancy: 'vacant', confidence: .98, floor: 'dirty', surfaces: 'unknown', connection: 'connected' };
+  assert((await stageCommand({ type: 'inspect', inspection: stageInspection })).ok);
+  assert((await stageCommand({ type: 'telemetry', telemetry: { roomId: 'stage-safety-room', source: 'simulator', observedAt: at + 10000, connection: 'connected', state: 'docked' } })).ok);
+  assert.equal((await stageCommand({ type: 'request_clean', jobId: 'office-unknown-surfaces' })).ok, false, 'ordinary office cleaning still requires surface evidence');
+  assert((await stageCommand({ type: 'inspect', inspection: { ...stageInspection, scope: 'stage', sequence: 2 } })).ok);
+  assert((await stageCommand({ type: 'request_clean', jobId: 'stage-clean' })).ok);
+  assert((await stageCommand({ type: 'claim_clean', jobId: 'stage-clean', claimId: 'stage-claim', claimExpiresAt: at + 25000 })).ok);
+  assert((await stageCommand({ type: 'authorize_dispatch', jobId: 'stage-clean', claimId: 'stage-claim' })).ok);
+  const person = await stageCommand({ type: 'inspect', inspection: { ...stageInspection, scope: 'stage', sequence: 3, occupancy: 'occupied' } });
+  assert(person.snapshot.events.some(e => e.type === 'cleaning.interrupt_required'), 'person on stage requests docking even while dispatch is pending');
   console.log('Native restart checks passed: inventory, job intent, and pending outbox survive actual process restart; observed motion/completion, interruption invalidation, fresh post-dock inspection and retry idempotency verified.');
 }

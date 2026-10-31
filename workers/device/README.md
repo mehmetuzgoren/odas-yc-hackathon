@@ -60,3 +60,7 @@ Coordinate/zone cleaning and calibration are deferred. This release sends only w
 ## Status and current verification
 
 Native actor compilation and Python driver imports are checked independently from physical connections. Devices are currently offline; camera routing, live Jev inference, Roborock authentication/telemetry, whole-office motion, interruption, and docking require the commissioning steps above. The simulator never labels its observations as live.
+
+## Grey stage demo
+
+Set `VISION_AREA=stage` for the camera overlooking the grey carpeted stage. Jev asks only whether loose debris is on that floor and whether a person is on the stage; audience members beyond its edge do not count. Stage inspections carry `scope: stage` and leave desk surfaces unknown. Stage vacuum dispatch ignores desk surfaces, while office readiness still requires its existing evidence. The minimum confidence remains 90%. A person entering the stage requests docking even during pending dispatch. Q10 freshness follows actual received status packets, including unchanged docked values, rather than command acceptance.

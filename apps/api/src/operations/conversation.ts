@@ -30,6 +30,7 @@ export function recordRoomConversation(rt: Context, state: RoomSnapshot) {
   const i = state.inspection;
   if (i) {
     const body = !fresh(state, rt.clock.now()) || i.occupancy === 'unknown' ? null
+      : i.scope === 'stage' ? `The stage floor is ${i.floor}. ${i.occupancy === 'occupied' ? 'A person is on the stage. Return to dock.' : 'No person is on the stage.'} Confidence: ${Math.round(i.confidence * 100)}%.`
       : i.occupancy === 'occupied' ? 'Someone is in the room. Keep the vacuum stopped.'
       : `The room is vacant. The floor is ${i.floor}; surfaces are ${i.surfaces}.`;
     recordChange(rt, state.roomId, 'inspection', JSON.stringify([i.source, body]), state.revision, body ? [{ source: i.source === 'camera' ? 'Jev' : 'Inspection (simulator)', target: 'Room agent', body }] : []);
