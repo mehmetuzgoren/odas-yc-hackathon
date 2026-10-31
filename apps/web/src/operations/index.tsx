@@ -464,8 +464,14 @@ function Monitor({ id }: { id: string }) {
   const [busy, setBusy] = useState(false);
   const [dockNote, setDockNote] = useState('');
   const [cameraFailed, setCameraFailed] = useState(false);
-  const captured = detail?.state.inspection?.capturedAt;
-  useEffect(() => setCameraFailed(false), [captured, demo?.camera.connected]);
+  const [previewAttempt, setPreviewAttempt] = useState(0);
+  const simulated = detail?.deviceMode === 'simulator';
+  useEffect(() => { setCameraFailed(false); setPreviewAttempt(0); }, [id]);
+  useEffect(() => {
+    if (!cameraFailed || simulated) return;
+    const timer = setTimeout(() => { setCameraFailed(false); setPreviewAttempt(value => value + 1); }, 3000);
+    return () => clearTimeout(timer);
+  }, [cameraFailed, simulated]);
   async function configure(changes: { jevEnabled?: boolean; roboEnabled?: boolean }) {
     setBusy(true);
     try {
@@ -489,7 +495,6 @@ function Monitor({ id }: { id: string }) {
   const { office, workspace } = detail;
   const state = demo?.state ?? detail.state;
   const phase = phaseOf(state);
-  const simulated = detail.deviceMode === 'simulator';
   const readOnly = !detail.canControlDevices;
   const stale = !!demo?.camera.capturedAt && Date.now() - demo.camera.capturedAt > 10_000;
   const camera = demo ? (!demo.camera.connected ? 'disconnected' : stale ? 'stale' : 'connected') : state.inspection?.connection;
@@ -505,30 +510,31 @@ function Monitor({ id }: { id: string }) {
         </div>
       </div>
       {demo && <div className="flex items-center gap-5">
-        <label className="flex items-center gap-2 text-sm font-medium">Monitor on<Switch label="Monitor on (Jev)" checked={demo.jevEnabled} disabled={busy || readOnly} onChange={jevEnabled => void configure({ jevEnabled })} /></label>
-        <label className="flex items-center gap-2 text-sm font-medium">Auto clean<Switch label="Auto clean (Robo)" checked={demo.roboEnabled} disabled={busy || readOnly} onChange={roboEnabled => void configure({ roboEnabled })} /></label>
+        <label className="flex items-center gap-3 text-sm font-medium"><span>Jev<span className="block text-xs font-normal text-stone-500">4 checks/sec</span></span><Switch label="Jev checks (4 per second)" checked={demo.jevEnabled} disabled={busy || readOnly} onChange={jevEnabled => void configure({ jevEnabled })} /></label>
+        <label className="flex items-center gap-3 text-sm font-medium"><span>Robo<span className="block text-xs font-normal text-stone-500">Vacuum dispatch</span></span><Switch label="Robo vacuum dispatch" checked={demo.roboEnabled} disabled={busy || readOnly} onChange={roboEnabled => void configure({ roboEnabled })} /></label>
       </div>}
     </header>
     <section className={`rounded-2xl border p-5 ${phase.tone}`}>
       <p className="font-serif text-3xl font-semibold">{phase.label}</p>
       <p className="mt-1 text-sm">{phase.reason}</p>
-      {demo && <p className="mt-2 text-xs opacity-80">{demo.jevEnabled && demo.camera.connected ? `Live checks at ${demo.captureFps} frames per second` : `Checks paused (${demo.jevEnabled ? 'camera offline' : 'monitor off'})`} · {demo.vision.completed} so far{demo.vision.lastLatencyMs !== null ? ` · last took ${(demo.vision.lastLatencyMs / 1000).toFixed(1)} s` : ''}{demo.vision.dropped ? ` · ${demo.vision.dropped} skipped` : ''}</p>}
+      {demo && <p className="mt-2 text-xs opacity-80">{demo.jevEnabled && demo.camera.connected ? `Jev checks at ${demo.captureFps} frames per second` : `Jev ${demo.jevEnabled ? 'waiting for camera frames' : 'off'}`} · {demo.vision.completed} results{demo.vision.lastLatencyMs !== null ? ` · last took ${(demo.vision.lastLatencyMs / 1000).toFixed(1)} s` : ''}{demo.vision.dropped ? ` · ${demo.vision.dropped} skipped` : ''}</p>}
       <p className={`text-xs opacity-80 ${demo ? 'mt-0.5' : 'mt-2'}`}>Evidence captured {clock(state.inspection?.capturedAt)} · Revision {state.revision}</p>
       {demo?.vision.lastError && <p className="mt-1 text-sm font-medium text-red-700">{demo.vision.lastError}{demo.vision.retryAfterMs ? ` Retrying in ${Math.ceil(demo.vision.retryAfterMs / 1000)} s.` : ''}</p>}
       {dockNote && <p role="status" className="mt-1 text-sm font-medium text-red-700">{dockNote}</p>}
       <div className="mt-4 flex flex-wrap gap-2">
         <button disabled={busy || readOnly} onClick={() => void run('inspect', 'Inspection requested and recorded.')} className={primary}>Inspect room</button>
-        <button disabled={busy || readOnly || state.operational !== 'available' || demo?.roboEnabled === false} title={demo?.roboEnabled === false ? 'Turn on Auto clean first' : undefined} onClick={() => void run('clean', 'Cleaning request recorded. Dispatch still requires actor authorization and observed vacancy.')} className={secondary}>Request vacuum clean</button>
+        <button disabled={busy || readOnly || state.operational !== 'available' || demo?.roboEnabled === false} title={demo?.roboEnabled === false ? 'Turn on Robo first' : undefined} onClick={() => void run('clean', 'Cleaning request recorded. Dispatch still requires actor authorization and observed vacancy.')} className={secondary}>Request vacuum clean</button>
         <button disabled={busy || readOnly} onClick={() => void run('dock', 'Dock request recorded. Check observed robot state for completion.')} className={secondary}>Return to dock</button>
       </div>
     </section>
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.25fr_1fr]">
       <section className="space-y-3">
-        <div className={`relative overflow-hidden rounded-2xl border-4 bg-stone-900 transition-colors ${demo?.vision.inFlight ? 'border-sky-500' : 'border-transparent'}`}>
-          {cameraFailed || camera === 'disconnected' ? <div className="flex aspect-video items-center justify-center px-6 text-center text-sm text-stone-400">{simulated ? 'Simulated observations do not contain camera photos.' : 'Camera offline. Waiting for a new frame.'}</div>
-            : <img src={demo ? `/api/operator/rooms/${id}/stream` : `/api/operator/rooms/${id}/frame?at=${captured ?? 0}`} alt={`Latest restricted camera frame for ${roomName(office.name)}`} onError={() => setCameraFailed(true)} className="aspect-video w-full object-contain" />}
+        <div className="relative aspect-video overflow-hidden rounded-2xl border-4 border-transparent bg-stone-900">
+          {!simulated && <img key={`${id}:${previewAttempt}`} src={`/api/operator/rooms/${id}/stream?connection=${previewAttempt}`} alt={`Live camera preview for ${roomName(office.name)}`} onLoad={() => setCameraFailed(false)} onError={() => setCameraFailed(true)} className="h-full w-full object-contain" />}
+          {(simulated || cameraFailed || camera === 'disconnected') && <div className="absolute inset-0 flex items-center justify-center bg-stone-900 px-6 text-center text-sm text-stone-400">{simulated ? 'Simulated observations do not contain camera photos.' : 'Waiting for camera frames. Reconnecting automatically.'}</div>}
           {stale && camera !== 'disconnected' && <span className="absolute top-3 left-3 rounded-full bg-amber-500 px-3 py-1 text-xs font-semibold text-white">Stale: no new frame for 10 s</span>}
         </div>
+        <p className="text-xs text-stone-500">Camera · 4 FPS · independent of Jev and Robo{demo ? ` · ${demo.camera.framesCaptured} frames captured` : ''}</p>
       </section>
       <AgentConversation key={id} roomId={id} />
     </div>

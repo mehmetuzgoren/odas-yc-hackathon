@@ -18,6 +18,11 @@ The conversation records meaningful inspection, robot, cleaning-job, control, an
 
 Both controls start **off** whenever the device worker starts. They are shared backend state for the room, so refreshing a page reads the actual current values rather than resetting them. They do not persist across worker restarts.
 
+- **Jev** controls four vision checks per second, one for each newly captured JPEG. It does not control the camera or Robo.
+- **Robo** permits vacuum dispatch through the existing safety checks. It does not control capture, preview, or Jev checks. Physical dispatch still requires fresh Jev vacancy evidence.
+
+Camera capture and the MJPEG preview run independently at four frames per second, including when both controls are off. The browser keeps the stream connected through toggle changes and retries a failed preview. If an RTSP decoder stalls without delivering a complete frame for eight seconds, the worker stops it and reconnects. A disconnected camera stays visibly disconnected until real frames resume.
+
 ```json
 {"jevEnabled": true}
 ```

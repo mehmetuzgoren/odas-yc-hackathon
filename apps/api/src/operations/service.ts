@@ -200,7 +200,7 @@ export function createOperationsService(rt: Runtime): OperationsService {
     const status = await demoStatus(roomId, changes);
     for (const key of ['jevEnabled', 'roboEnabled'] as const) if (previous[key] !== status[key]) {
       const target = key === 'jevEnabled' ? 'Jev' : 'Robo';
-      recordChange(rt, roomId, key, String(status[key]), now(), [{ source: 'Host', target, body: `${key === 'jevEnabled' ? 'Monitoring' : 'Auto clean'} ${status[key] ? 'enabled' : 'disabled'}.` }]);
+      recordChange(rt, roomId, key, String(status[key]), now(), [{ source: 'Host', target, body: `${key === 'jevEnabled' ? 'Jev checks' : 'Vacuum dispatch'} ${status[key] ? 'enabled' : 'disabled'}. Camera capture continues independently.` }]);
     }
     if (changes.jevEnabled === false && rt.config.deviceMode === 'physical') await inspect(roomId);
     if (changes.roboEnabled === false) {
