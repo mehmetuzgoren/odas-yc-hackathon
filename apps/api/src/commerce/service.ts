@@ -161,7 +161,7 @@ export function createCommerceService(rt: Runtime) {
       const oldData = parseJSON<Row>(r.data, {});
       // Stripe requires >=30 minutes; leave a minute before the actor hold expires.
       const expires = oldData.checkoutExpiresAt || Math.floor((Date.now() + (r.hold_expires_at - rt.clock.now()) - 60_000) / 1000);
-      const integration = oldData.integrationIdentifier || `odas_mvp_${digest(id).slice(0, 8).replace(/[0-9]/g, n => String.fromCharCode(97 + Number(n)))}`;
+      const integration = oldData.integrationIdentifier || process.env.STRIPE_INTEGRATION_IDENTIFIER || `odas_mvp_${digest(id).slice(0, 8).replace(/[0-9]/g, n => String.fromCharCode(97 + Number(n)))}`;
       r = update(r, { status: 'checkout_pending', data: JSON.stringify({ ...oldData, workflow: 'checkout_creating', checkoutExpiresAt: expires, integrationIdentifier: integration }) });
       const metadata = { booking_id: id, user_id: user.id, quote_id: r.quote_id, room_id: r.original_room_id, start_at: String(r.start_at), end_at: String(r.end_at), namespace: rt.config.namespace };
       const office = await rt.services.catalog.office(r.room_id, { startAt: r.start_at, endAt: r.end_at });
