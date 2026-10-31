@@ -4,11 +4,11 @@ import { Temporal } from '@js-temporal/polyfill';
 import { Building2, ChevronLeft, ChevronRight, CircleAlert, LoaderCircle, X } from 'lucide-react';
 import { zonedNow } from './marketplace/time';
 
-export function Photo({ src, alt = '', className = '' }: { src?: string; alt?: string; className?: string }) {
+export function Photo({ src, alt = '', className = '', compact = false }: { src?: string; alt?: string; className?: string; compact?: boolean }) {
   const [failed, setFailed] = useState(false);
   if (src && !failed) return <img src={src} alt={alt} loading="lazy" onError={() => setFailed(true)} className={`object-cover ${className}`} />;
   return <div className={`flex flex-col items-center justify-center gap-2 bg-linen text-stone-400 ${className}`}>
-    <Building2 className="h-8 w-8" aria-hidden="true" /><span className="text-xs">Photos coming soon</span>
+    <Building2 className={compact ? 'h-5 w-5' : 'h-8 w-8'} aria-hidden="true" />{!compact && <span className="text-xs">Photos coming soon</span>}
   </div>;
 }
 

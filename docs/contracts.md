@@ -20,7 +20,7 @@ Responses are JSON; errors are {error: string, code?: string}. Mutations use sam
 
 | Owner | Endpoints |
 | --- | --- |
-| Marketplace | GET /catalog/search, /catalog/groups/:id, /catalog/offices/:id |
+| Marketplace | GET /catalog/search, /catalog/groups/:id, /catalog/groups/:id/availability, /catalog/offices/:id |
 | Commerce | GET /auth/session; POST /auth/signup, /auth/login, /auth/logout; POST /quotes, /reservations, /reservations/:id/checkout, /reservations/:id/reconcile, /reservations/:id/cancel, /reservations/:id/check-in, /reservations/:id/check-out; GET /reservations, /reservations/:id; POST /payments/webhook; POST /offers/:id/accept, /offers/:id/decline |
 | Operations | GET /operator/rooms, /operator/rooms/:id, /operator/tasks; PATCH /operator/rooms/:id; POST /operator/rooms/:id/{inspect,clean,dock,blocks}, /operator/tasks/:id/resolve; DELETE /operator/rooms/:id/blocks/:blockId; restricted camera frame endpoint |
 | Concierge | GET /conversations, /conversations/:id/messages, /notifications, /events (SSE); POST /conversations, /conversations/:id/messages, /notifications/:id/read; internal event/action endpoints |

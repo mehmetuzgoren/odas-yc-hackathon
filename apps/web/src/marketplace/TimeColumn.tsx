@@ -13,7 +13,7 @@ const hatch = { backgroundImage: 'repeating-linear-gradient(135deg, rgba(120,113
 const BOOKED = 'That time is booked. Pick an open time.';
 const coarsePointer = () => typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches;
 
-export interface BusyBlock { from: number; to: number; kind: 'closed' | 'booked' }
+export interface BusyBlock { from: number; to: number; kind: 'closed' | 'booked' | 'blocked' }
 export interface TimeBoard { date: string; start: number; end: number; conflict: boolean; closed: boolean; nowMinutes: number; busy: BusyBlock[]; setRange: (start: number, end: number) => void }
 type Drag = { mode: 'create'; anchor: number } | { mode: 'move'; offset: number } | { mode: 'resize' } | { mode: 'tap'; y: number };
 
@@ -117,8 +117,8 @@ export function TimeColumn({ board, height = 480 }: { board: TimeBoard; height?:
           </div>)}
           {passed > 0 && <div className="absolute inset-x-0 top-0" style={{ height: toY(passed), ...hatch }} />}
           {busy.map(block => block.kind === 'closed'
-            ? <div key={block.from} className="absolute inset-x-0" style={{ top: toY(block.from), height: toY(block.to - block.from), ...hatch }} />
-            : <div key={block.from} className="absolute inset-x-1 overflow-hidden rounded-md bg-stone-300/80 px-2 py-1 text-[11px] font-medium text-stone-700" style={{ top: toY(block.from), height: Math.max(toY(block.to - block.from), 12) }}>Booked · {rangeLabel(block.from, block.to)}</div>)}
+            ? <div key={`closed-${block.from}`} className="absolute inset-x-0" style={{ top: toY(block.from), height: toY(block.to - block.from), ...hatch }} />
+            : <div key={`${block.kind}-${block.from}`} className="absolute inset-x-1 overflow-hidden rounded-md bg-stone-300/80 px-2 py-1 text-[11px] font-medium text-stone-700" style={{ top: toY(block.from), height: Math.max(toY(block.to - block.from), 12) }}>{block.kind === 'blocked' ? 'Unavailable' : `Booked · ${rangeLabel(block.from, block.to)}`}</div>)}
           {nowMinutes > 0 && nowMinutes < 1440 && <div className="pointer-events-none absolute inset-x-0 z-20 h-0.5 bg-now" style={{ top: toY(nowMinutes) }}><span className="absolute -top-[3px] -left-1 h-2 w-2 rounded-full bg-now" /></div>}
           {!board.closed && <div data-role="sel" role="slider" tabIndex={0} aria-label="Selected time. Arrow keys move it, Shift and arrow keys change its length." aria-valuemin={0} aria-valuemax={LAST_END} aria-valuenow={board.start} aria-valuetext={rangeLabel(board.start, board.end)} onKeyDown={onSelectionKey} style={{ top: toY(board.start), height: toY(length), touchAction: 'none' }} className={`absolute inset-x-1 z-10 cursor-grab select-none rounded-lg px-2.5 py-1.5 text-white shadow-md transition-colors active:cursor-grabbing ${board.conflict ? 'bg-red-600' : 'bg-forest'}`}>
             <p className="text-sm leading-tight font-semibold">{rangeLabel(board.start, board.end)}</p>

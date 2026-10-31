@@ -7,4 +7,7 @@ export const money = (cents: number) => new Intl.NumberFormat('en-US', { style: 
 export const intervalSchema = z.object({ startAt: z.number().int().positive(), endAt: z.number().int().positive() }).refine(v => v.endAt > v.startAt, 'End must follow start');
 export const eventSchema = z.object({ version: z.literal(1), id: z.string().min(1), type: z.string(), roomId: z.string(), bookingId: z.string().optional(), correlationId: z.string(), revision: z.number().int().nonnegative(), idempotencyKey: z.string(), occurredAt: z.number(), payload: z.record(z.string(), z.unknown()) });
 export const CANCELLATION_POLICY = 'Full refund before the reservation starts. Full refund if ODAS cannot provide your reserved or accepted replacement office. Ordinary cancellations after check-in require operator review.';
+export interface BusySpan { from: number; to: number; kind: 'booked' | 'blocked' }
+export interface RoomDay { roomId: string; bookable: boolean; busy: BusySpan[] }
+export interface BuildingDay { groupId: string; date: string; timezone: string; closed: boolean; open: string; close: string; bufferMinutes: number; rooms: RoomDay[] }
 export type * from "../../actors/src/contracts";

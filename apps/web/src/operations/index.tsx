@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams, Navigate } from 'react-router-dom';
 import { Temporal } from '@js-temporal/polyfill';
 import { ArrowLeft, Trash2 } from 'lucide-react';
 import { TIMEZONE, TURNOVER_MS, money, type RoomSnapshot, type SearchResult } from '@odas/contracts';
@@ -46,9 +46,12 @@ function useHostRooms() {
     setRooms(inventory.rooms); setOpenTasks(attention.tasks.filter(task => task.status !== 'resolved').length); setError('');
   }, []);
   useEffect(() => {
-    reload().catch(cause => setError(message(cause)));
-    const timer = window.setInterval(() => { reload().catch(() => {}); }, 10_000);
-    return () => window.clearInterval(timer);
+    let active = true;
+    let timer: number;
+    // Wait for each read to finish: it can outlast the interval, and overlapping reads only slow each other down.
+    const poll = () => reload().catch(cause => { if (active) setError(message(cause)); }).finally(() => { if (active) timer = window.setTimeout(() => void poll(), 10_000); });
+    void poll();
+    return () => { active = false; window.clearTimeout(timer); };
   }, [reload]);
   return { rooms, openTasks, error, reload };
 }
@@ -295,14 +298,6 @@ function Attention({ onChanged }: { onChanged: () => void }) {
   return <div className="max-w-4xl space-y-4"><p className="text-sm text-stone-600">Resolving a task records evidence. Room readiness comes from fresh inspections and device observations.</p><TaskList tasks={tasks} onChanged={() => { load(); onChanged(); }} /></div>;
 }
 
-function HostAccessRequired() {
-  return <div className="max-w-lg rounded-2xl border border-stone-200 bg-white p-8">
-    <h2 className="font-serif text-2xl font-semibold">Host access required</h2>
-    <p className="mt-2 text-sm text-stone-600">You're signed in as a guest. Host tools and bookings for hosted rooms are only available to separately provisioned host accounts.</p>
-    <div className="mt-6"><Link to="/bookings" className="inline-block rounded-lg bg-forest px-5 py-2.5 text-sm font-medium text-white">My bookings</Link></div>
-  </div>;
-}
-
 function HostTabs() {
   const [params, setParams] = useSearchParams();
   const { rooms, openTasks, error, reload } = useHostRooms();
@@ -313,9 +308,11 @@ function HostTabs() {
   </>;
 }
 
+// Signed-out visitors can still sign in here; anyone else without listings has no dashboard to see.
 function HostGate({ title, children }: { title: string; children: ReactNode }) {
-  const { user } = useSession();
-  return <RequireAuth title={title}>{user?.role === 'operator' ? children : <HostAccessRequired />}</RequireAuth>;
+  const { user, isHost, loading } = useSession();
+  if (!loading && user && !isHost) return <Navigate replace to="/" />;
+  return <RequireAuth title={title}>{children}</RequireAuth>;
 }
 
 export function HostPage() {

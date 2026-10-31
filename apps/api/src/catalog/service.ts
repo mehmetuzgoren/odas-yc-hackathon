@@ -1,7 +1,7 @@
 import { Temporal } from '@js-temporal/polyfill';
 import type { CatalogService, Runtime } from '../core';
 import { fail, parseJSON } from '../core';
-import { TIMEZONE, type Hours, type Office, type SearchInput, type Workspace } from '@odas/contracts';
+import { TIMEZONE, type BuildingDay, type BusySpan, type Hours, type Office, type SearchInput, type Workspace } from '@odas/contracts';
 
 type Row = Record<string, any>;
 
@@ -106,8 +106,35 @@ export function createCatalogService(rt: Runtime): CatalogService {
     return withAvailability(mapOffice(row, mapWorkspace(workspace)), input, interval.startAt, interval.endAt);
   }
 
+  // Times only: guests can already test any interval, so this never exposes who booked or why.
+  async function availability(id: string, date: string): Promise<BuildingDay> {
+    const row = rt.db.query('SELECT * FROM workspace_groups WHERE id=?').get(id) as Row | null;
+    if (!row) fail(404, 'Workspace not found.', 'not_found');
+    const workspace = mapWorkspace(row);
+    const midnight = localInstant(date, '00:00', workspace.timezone);
+    const plainDate = Temporal.PlainDate.from(date);
+    const nextMidnight = localInstant(plainDate.add({ days: 1 }).toString(), '00:00', workspace.timezone);
+    const minuteOf = (instant: number) => {
+      if (instant <= midnight) return 0;
+      if (instant >= nextMidnight) return 1440;
+      const local = Temporal.Instant.fromEpochMilliseconds(instant).toZonedDateTimeISO(workspace.timezone);
+      return local.hour * 60 + local.minute;
+    };
+    const span = (startAt: number, endAt: number, kind: BusySpan['kind']): BusySpan[] => startAt < nextMidnight && endAt > midnight ? [{ from: minuteOf(startAt), to: minuteOf(endAt), kind }] : [];
+    const rooms = await Promise.all(officeRows(id).map(async office => {
+      const state = await rt.rooms.snapshot(office.id);
+      const busy = [
+        ...state.intervals.filter(interval => interval.status !== 'canceled').flatMap(interval => span(interval.startAt, interval.endAt, 'booked')),
+        ...state.blocks.flatMap(block => span(block.startAt, block.endAt, 'blocked')),
+        ...(state.expectedReadyAt === null ? [] : span(midnight, state.expectedReadyAt, 'blocked')),
+      ].sort((a, b) => a.from - b.from);
+      return { roomId: office.id, bookable: state.operational === 'available', busy };
+    }));
+    return { groupId: id, date, timezone: workspace.timezone, closed: !workspace.hours.days.includes(plainDate.dayOfWeek), open: workspace.hours.open, close: workspace.hours.close, bufferMinutes: Number(process.env.TURNOVER_BUFFER_MINUTES) || 15, rooms };
+  }
+
   return {
-    group, office,
+    availability, group, office,
     async search(input) {
       const interval = resolveSearchInterval(input, rt.clock.now());
       if (input.maxRateCents !== undefined && (!Number.isSafeInteger(input.maxRateCents) || input.maxRateCents < 0)) fail(400, 'Enter a valid maximum hourly price.', 'invalid_price');

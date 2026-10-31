@@ -21,6 +21,11 @@ export function createCatalogRoutes(rt: Runtime) {
   return new Hono()
     .get('/catalog/search', async c => c.json(await rt.services.catalog.search(searchInput(c))))
     .get('/catalog/groups/:id', async c => c.json(await rt.services.catalog.group(c.req.param('id'), searchInput(c))))
+    .get('/catalog/groups/:id/availability', async c => {
+      const date = c.req.query('date') || '';
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) fail(400, 'Choose a valid date.', 'invalid_date');
+      return c.json(await rt.services.catalog.availability(c.req.param('id'), date));
+    })
     .get('/catalog/offices/:id', async c => c.json(await rt.services.catalog.office(c.req.param('id'), searchInput(c))));
 }
 
