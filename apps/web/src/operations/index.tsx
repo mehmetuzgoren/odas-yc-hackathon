@@ -450,7 +450,6 @@ function Chip({ tone = 'stone', children }: { tone?: 'green' | 'amber' | 'red' |
 }
 
 function phaseOf(state: RoomSnapshot) {
-  if (state.attentionReasons.length) return { label: 'Needs attention', reason: `${state.attentionReasons.join('. ')}.`, tone: 'border-red-300 bg-red-50 text-red-900' };
   if (state.job && ['requested', 'dispatching', 'started'].includes(state.job.status)) return { label: 'Cleaning', reason: state.job.reason || 'Vendor acceptance and observed motion are separate stages.', tone: 'border-sky-300 bg-sky-50 text-sky-900' };
   if (state.occupancy === 'occupied') return { label: 'Occupied', reason: 'Someone is in the room. Cleaning waits until they leave.', tone: 'border-red-300 bg-red-50 text-red-900' };
   if (state.readiness === 'ready') return { label: 'Ready', reason: 'The room is ready for the next guest.', tone: 'border-forest/30 bg-mist text-forest' };
@@ -459,7 +458,7 @@ function phaseOf(state: RoomSnapshot) {
 }
 
 function Monitor({ id }: { id: string }) {
-  const { detail, error, live, reload } = useRoomDetail(id);
+  const { detail, error, live } = useRoomDetail(id);
   const [demo, setDemo] = useDemoStatus(id);
   const [busy, setBusy] = useState(false);
   const [dockNote, setDockNote] = useState('');
@@ -481,20 +480,10 @@ function Monitor({ id }: { id: string }) {
     } catch (cause) { toast(message(cause), 'error'); }
     finally { setBusy(false); }
   }
-  async function run(path: string, done: string) {
-    setBusy(true);
-    try {
-      const result = await api<any>(`/operator/rooms/${id}/${path}`, { method: 'POST', body: JSON.stringify({}) });
-      if (result?.accepted === false || result?.ok === false) throw new Error(result.message || (result.uncertain ? 'Command delivery is uncertain. Reconcile observed device state before retrying.' : 'The device action was not accepted.'));
-      await reload(); toast(done);
-    } catch (cause) { toast(message(cause), 'error'); }
-    finally { setBusy(false); }
-  }
   if (error && !detail) return <p className="rounded-2xl border border-stone-200 bg-white p-6 text-stone-700">The Room Monitor is only available to this room's host. ({error})</p>;
   if (!detail) return <Loading label="Connecting to the room…" />;
   const { office, workspace } = detail;
   const state = demo?.state ?? detail.state;
-  const phase = phaseOf(state);
   const readOnly = !detail.canControlDevices;
   const stale = !!demo?.camera.capturedAt && Date.now() - demo.camera.capturedAt > 10_000;
   const camera = demo ? (!demo.camera.connected ? 'disconnected' : stale ? 'stale' : 'connected') : state.inspection?.connection;
@@ -514,19 +503,7 @@ function Monitor({ id }: { id: string }) {
         <label className="flex items-center gap-3 text-sm font-medium"><span>Robo<span className="block text-xs font-normal text-stone-500">Vacuum dispatch</span></span><Switch label="Robo vacuum dispatch" checked={demo.roboEnabled} disabled={busy || readOnly} onChange={roboEnabled => void configure({ roboEnabled })} /></label>
       </div>}
     </header>
-    <section className={`rounded-2xl border p-5 ${phase.tone}`}>
-      <p className="font-serif text-3xl font-semibold">{phase.label}</p>
-      <p className="mt-1 text-sm">{phase.reason}</p>
-      {demo && <p className="mt-2 text-xs opacity-80">{demo.jevEnabled && demo.camera.connected ? `Jev checks at ${demo.captureFps} frames per second` : `Jev ${demo.jevEnabled ? 'waiting for camera frames' : 'off'}`} · {demo.vision.completed} results{demo.vision.lastLatencyMs !== null ? ` · last took ${(demo.vision.lastLatencyMs / 1000).toFixed(1)} s` : ''}{demo.vision.dropped ? ` · ${demo.vision.dropped} skipped` : ''}</p>}
-      <p className={`text-xs opacity-80 ${demo ? 'mt-0.5' : 'mt-2'}`}>Evidence captured {clock(state.inspection?.capturedAt)} · Revision {state.revision}</p>
-      {demo?.vision.lastError && <p className="mt-1 text-sm font-medium text-red-700">{demo.vision.lastError}{demo.vision.retryAfterMs ? ` Retrying in ${Math.ceil(demo.vision.retryAfterMs / 1000)} s.` : ''}</p>}
-      {dockNote && <p role="status" className="mt-1 text-sm font-medium text-red-700">{dockNote}</p>}
-      <div className="mt-4 flex flex-wrap gap-2">
-        <button disabled={busy || readOnly} onClick={() => void run('inspect', 'Inspection requested and recorded.')} className={primary}>Inspect room</button>
-        <button disabled={busy || readOnly || state.operational !== 'available' || demo?.roboEnabled === false} title={demo?.roboEnabled === false ? 'Turn on Robo first' : undefined} onClick={() => void run('clean', 'Cleaning request recorded. Dispatch still requires actor authorization and observed vacancy.')} className={secondary}>Request vacuum clean</button>
-        <button disabled={busy || readOnly} onClick={() => void run('dock', 'Dock request recorded. Check observed robot state for completion.')} className={secondary}>Return to dock</button>
-      </div>
-    </section>
+    {dockNote && <Notice tone="error">{dockNote}</Notice>}
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.25fr_1fr]">
       <section className="space-y-3">
         <div className="relative aspect-video overflow-hidden rounded-2xl border-4 border-transparent bg-stone-900">

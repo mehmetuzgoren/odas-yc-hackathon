@@ -2,7 +2,7 @@ import type { DeviceAdapter, DeviceTelemetry, DomainEvent, Inspection, RoomSnaps
 import type { Runtime, OperationsService } from '../core';
 import { existsSync, readFileSync } from 'node:fs';
 import { audit, enqueue, fail, uid } from '../core';
-import { recordChange, recordRoomConversation } from './conversation';
+import { recordRoomConversation } from './conversation';
 
 const VACANCY_AGE = 30_000;
 export function createDeviceAdapter(rt: Runtime): DeviceAdapter {
@@ -196,12 +196,7 @@ export function createOperationsService(rt: Runtime): OperationsService {
     return state.operational === 'available' && !!i && i.occupancy === 'vacant' && i.confidence >= 0.9 && i.connection === 'connected' && i.surfaces === 'clear' && now() - i.capturedAt <= VACANCY_AGE && i.capturedAt <= now() + 1000;
   }
   async function configureDemo(roomId: string, changes: { jevEnabled?: boolean; roboEnabled?: boolean }) {
-    const previous = await demoStatus(roomId);
     const status = await demoStatus(roomId, changes);
-    for (const key of ['jevEnabled', 'roboEnabled'] as const) if (previous[key] !== status[key]) {
-      const target = key === 'jevEnabled' ? 'Jev' : 'Robo';
-      recordChange(rt, roomId, key, String(status[key]), now(), [{ source: 'Host', target, body: `${key === 'jevEnabled' ? 'Jev checks' : 'Vacuum dispatch'} ${status[key] ? 'enabled' : 'disabled'}. Camera capture continues independently.` }]);
-    }
     if (changes.jevEnabled === false && rt.config.deviceMode === 'physical') await inspect(roomId);
     if (changes.roboEnabled === false) {
       const state = await rt.rooms.snapshot(roomId);
