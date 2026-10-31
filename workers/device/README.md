@@ -27,7 +27,9 @@ The production path is backend device worker -> VPN -> an always-on office subne
 
 The example policy in `tailscale-grants.example.json` and forwarding settings in `office-gateway.sysctl.example.conf` make the route requirements concrete. Replace the example camera address and merge the grants into your existing tailnet policy. Tag the backend `tag:odas-backend` and the office gateway `tag:odas-office-gateway`; do not replace an unrelated tailnet policy wholesale.
 
-No port forwarding, public RTSP address, or camera VPN client is required. One long-lived FFmpeg process runs per configured camera and retains only its latest frame. HTTP JPEG cameras can use `kind: http_jpeg` with the same secret URL mechanism.
+No port forwarding, public RTSP address, or camera VPN client is required. One long-lived FFmpeg process runs per configured camera, captures four JPEGs per second, and retains only its latest frame. HTTP JPEG cameras can use `kind: http_jpeg` with the same secret URL mechanism.
+
+The `/demo` backend controls start with Jev and Robo off. Camera capture and the private MJPEG preview continue while Jev is off. Enabling Jev submits every captured frame immediately, with concurrent requests and immediate delivery of completed inspections to the room actor. Robo must be enabled separately before any cleaning start. See [the demo API contract](../../docs/demo-api.md) for controls, status, preview endpoints, cancellation, and concurrency limits.
 
 ## Typed image inspection
 
