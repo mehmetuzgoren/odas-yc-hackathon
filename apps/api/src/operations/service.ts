@@ -158,7 +158,8 @@ export function createOperationsService(rt: Runtime): OperationsService {
     if (event.type === 'room.inspection_requested') return await inspect(event.roomId);
     if (event.type === 'cleaning.requested') return await dispatch(event.roomId, event);
     if (event.type === 'cleaning.interrupt_required') return await dock(event.roomId, String(event.payload.reason || 'Vacancy evidence is unavailable'), `${event.id}:dock`);
-    if (event.type === 'room.inspected' && state.inspection && state.inspection.id === event.payload.inspectionId) {
+    // Relay may lag behind a newer inspection when persistence is remote. Use the current actor evidence; dispatch still performs fresh safety checks.
+    if (event.type === 'room.inspected' && state.inspection) {
       if (state.inspection.floor === 'dirty' && state.inspection.occupancy === 'vacant' && state.inspection.surfaces === 'clear' && state.inspection.confidence >= 0.9 && (!state.job || !['requested', 'dispatching', 'started', 'uncertain'].includes(state.job.status)) && await roboEnabled(event.roomId)) {
         const result = await rt.rooms.command(event.roomId, { id: `${event.id}:clean`, type: 'request_clean', now: now(), jobId: `clean:${event.id}`, expectedReadyAt: now() + Number(rt.config.cleaningEstimateMs || 10 * 60_000) });
         await drainRoom(event.roomId, result.snapshot);
